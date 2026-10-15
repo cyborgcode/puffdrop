@@ -757,7 +757,7 @@ cmd_setup() {
 
   if (( ${#missing[@]} )); then
     printf '\nNot ready to receive yet:\n'
-    printf -- '  - %s\n' "${missing[@]}"
+    printf -- '  - %s\n' "${missing[@]#*$'\t'}"
   else
     printf '\nReady. Turn receiving on from the top bar, or run: puffdrop on\n'
   fi
