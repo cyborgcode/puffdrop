@@ -114,10 +114,13 @@ class OmdropActionItem extends PopupMenu.PopupBaseMenuItem {
 // theme does not draw it insensitive (greyed), but never activated, focused
 // or highlighted itself; what it holds still takes clicks and focus.
 function holder(styleClass = '') {
-    return new PopupMenu.PopupBaseMenuItem({
+    const item = new PopupMenu.PopupBaseMenuItem({
         reactive: true, activate: false, hover: false, can_focus: false,
         style_class: `omdrop-holder ${styleClass}`,
     });
+    // No hover highlight either: it is not a target.
+    item.track_hover = false;
+    return item;
 }
 
 const Indicator = GObject.registerClass(

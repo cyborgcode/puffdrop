@@ -35,7 +35,7 @@ function roundedRect(cr, x, y, w, h, r) {
 const Scope = GObject.registerClass(
 class OmdropScope extends St.DrawingArea {
     _init(radar) {
-        super._init({style_class: 'omdrop-radar-scope', reactive: true, x_expand: true, y_expand: true});
+        super._init({style_class: 'omdrop-radar-scope', reactive: true, width: 240, height: 240});
         this._radar = radar;
     }
 
@@ -59,7 +59,10 @@ export const Radar = GObject.registerClass({
         super._init({
             style_class: 'omdrop-radar',
             layout_manager: new Clutter.BinLayout(),
+            // A fixed square, centred in its row however wide the menu is.
+            x_expand: true,
             x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
         });
         this._soundDir = soundDir;
         this._scanning = false;
