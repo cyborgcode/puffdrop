@@ -1,0 +1,8 @@
+{
+  "uuid": "omdrop@cyborgcode.github.io",
+  "name": "Omdrop",
+  "description": "AirDrop for Ubuntu: send and receive files with nearby iPhones, iPads and Macs. Turn receiving on, choose who may send, and send files from a radar of nearby devices. Needs the omdrop command and its radio backend; see the project page.",
+  "shell-version": ["50"],
+  "url": "https://github.com/netmojo-systems/omdrop-plugin",
+  "version-name": "1.0.0"
+}

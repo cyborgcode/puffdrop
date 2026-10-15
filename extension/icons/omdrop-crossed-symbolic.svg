@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+  <!-- Struck through while the radio support is missing. -->
+  <path d="M1.5 3.5h21L12 13.5z" fill="#2e3436" stroke="#2e3436" stroke-width="1.7" stroke-linejoin="round"/>
+  <path d="M8 16h8v5.5H8z" fill="none" stroke="#2e3436" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M3 21 21 3" fill="none" stroke="#2e3436" stroke-width="1.7" stroke-linecap="round"/>
+</svg>

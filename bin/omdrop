@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# omdrop -- send and receive files with nearby Apple devices.
+# omdrop -- send and receive files with nearby Apple devices, on Ubuntu.
 #
+# This is the Ubuntu/GNOME port of github.com/netmojo-systems/omdrop-plugin.
 # "omdrop" is this project's name for the feature. The protocol it speaks is
 # Apple's, and its wire identifiers are not ours to rename: the mDNS service
 # type really is _airdrop._tcp, the endpoints really are /Discover, /Ask and
@@ -10,7 +11,8 @@
 # are protocol- and service-layer names, not product ones.
 #
 # This command owns the receive-window duration and receiver configuration
-# that do not belong in the panel.
+# that do not belong in the panel, which is the GNOME Shell extension in
+# extension/.
 #
 # The panel holds no state of its own. It shells out to this command for every
 # action (toggle, peers --json, send --pick, dir --pick, sound) and reads
@@ -31,7 +33,7 @@
 # start; the receiver remains the gate, and a set that the receiver rejects is
 # rolled back.
 #
-# Install:  ln -s "$PWD/tools/omdrop" ~/.local/bin/omdrop
+# Install:  bin/omdrop setup   (links ~/.local/bin/omdrop to this file)
 # The unit itself is not enabled by default; see the header of
 # packaging/systemd/airdrop-receiver.service.
 set -uo pipefail
@@ -114,8 +116,10 @@ fi
 [[ -e "$SENDER" ]] && SENDER=$(readlink -f "$SENDER")
 
 # Being visible to Everyone is not a state to leave on by accident, so `on`
-# is bounded unless you say otherwise. Ten minutes is what iOS uses.
+# is bounded unless you say otherwise. Ten minutes is what iOS uses. `window`
+# saves another default, which is also where the panel's slider rests.
 DEFAULT_WINDOW=10m
+default_window() { local w; w=$(setting_get window); printf '%s\n' "${w:-$DEFAULT_WINDOW}"; }
 
 # An iPhone does not keep an AirDrop listener up while it is merely
 # discoverable -- it opens one in short bursts -- so a single attempt at one
@@ -154,7 +158,8 @@ omdrop -- send and receive files with nearby Apple devices
 
   on [-c|-e] [DURATION]
                     become visible to nearby Apple devices and receive files.
-                    Stops again after DURATION (default 10m). A bare number
+                    Stops again after DURATION (default 10m, or what
+                    `window` saved). A bare number
                     is minutes, so "on 3" is three minutes; "10m", "1h" and
                     "30s" also work. "forever" stays on until you turn it
                     off; "once" stops after the first file arrives.
@@ -189,6 +194,8 @@ omdrop -- send and receive files with nearby Apple devices
                     already listening. --json prints one JSON array
   name [NEW]        show the name, or set it (restarts a running receiver)
   dir [PATH|--pick] show the download folder, or set it (--pick: in a chooser)
+  window [DURATION] show or set the window `on` opens with no DURATION, and
+                    the panel's slider: once, forever, or a span such as 10m
   sound [on|off]    the panel's radar sound effects
   limit [PERCENT]   show the maximum transfer size, or set it to 1-90% of
                     currently free space (default 30%)
@@ -207,10 +214,12 @@ omdrop -- send and receive files with nearby Apple devices
   identity 1password use ITEM | off
                     use an identity already in 1Password, or stop using it
   setup             install what receiving needs: the service, the name Macs
-                    see, this computer's certificate, and the handler that
-                    opens received links on double-click. Safe to run again.
+                    see, this computer's certificate, the handler that opens
+                    received links on double-click, and the GNOME Shell
+                    extension that is the panel. Safe to run again.
   doctor [--json]   what is still missing before this can receive
-  install-driver    build and install the Wi-Fi driver, in a terminal you watch
+  install-driver    install the radio backend (omdrop-owl, built from a pinned
+                    commit) and the receiver's packages, with apt
   firewall ACTION   install or remove Omdrop's narrow UFW receiver rule
   links ACTION      install or remove the double-click handler for received
                     .url and .webloc links
@@ -226,8 +235,8 @@ Examples:
   omdrop on 10m
   omdrop on forever
   omdrop send ~/photo.jpg
-  omdrop send "Studio Mac" https://omarchy.org/
-  omdrop name "Brent's Omarchy"
+  omdrop send "Studio Mac" https://ubuntu.com/
+  omdrop name "Rayen's Ubuntu"
   omdrop limit 30
 EOF
 }
@@ -413,14 +422,13 @@ PY
 
 # ------------------------------------------------------------------ first run
 #
-# Nothing runs when a plugin is installed: `omarchy plugin add` clones a
-# repository and enables it, and that is the whole mechanism. So the systemd
+# Nothing runs when the repository is cloned. So the systemd
 # user unit that runs the receiver, the config file it reads and the TLS
 # material it serves with have to be created by a command somebody runs once.
 # That command is this one, and the panel may call it too, so every step is
 # idempotent: it compares before it writes and says only what it changed.
 #
-# What it cannot do is install the driver package. That needs root and pacman,
+# What it cannot do is install the radio backend. That needs root and apt,
 # and pretending otherwise would turn "set up" into a promise we break at the
 # first transfer. Missing pieces get named, never guessed at and never faked.
 
@@ -430,7 +438,7 @@ PY
 # plugin's bin/omdrop can itself be a symlink into a source checkout, and
 # resolving all the way lands beside the script instead of beside the files
 # that shipped with it. Not $0 alone either: through the ~/.local/bin/omdrop
-# symlink that setup creates, that lands in ~/.local (issue 12).
+# symlink that setup creates, that lands in ~/.local (omdrop issue 12).
 plugin_dir() {
   local path="$0" dir hops=0 next
   while (( hops++ < 16 )); do
@@ -445,16 +453,18 @@ plugin_dir() {
 }
 
 # The receiver's one import from outside the standard library, and the
-# official-repository package that provides it. The probe names the API the
+# Ubuntu package that provides it. The probe names the API the
 # receiver calls, because an unrelated `libarchive` module would satisfy a bare
 # import and still fail on the first upload.
 #
 # keyutils is the kernel keyring's library: the 1Password identity cache lives
-# in the keyring, and the receiver reads it through libkeyutils.
-RECEIVER_PKGS="python-libarchive-c keyutils"
+# in the keyring, and the receiver reads it through libkeyutils. The library
+# is checked the way bin/identity.py loads it, by soname, because Ubuntu keeps
+# it under a multiarch directory rather than /usr/lib.
+RECEIVER_PKGS="python3-libarchive-c keyutils"
 receiver_libs_installed() {
-  python3 -c 'from libarchive import stream_reader' >/dev/null 2>&1 \
-    && [[ -e /usr/lib/libkeyutils.so.1 ]]
+  python3 -c 'from libarchive import stream_reader
+import ctypes; ctypes.CDLL("libkeyutils.so.1")' >/dev/null 2>&1
 }
 
 # The identity this computer presents to Apple devices: its certificate and
@@ -528,8 +538,7 @@ identity_unlock() { exec 8>&-; }
 identity_notice() {
   local msg=$1
   printf '%s\n' "$msg" >&2
-  command -v omarchy-notification-send >/dev/null 2>&1 \
-    && omarchy-notification-send -t 8000 "Omdrop" "$msg" >/dev/null 2>&1
+  desktop_notify "Omdrop" "$msg"
   return 0
 }
 
@@ -558,25 +567,24 @@ cmd_identity() {
   esac
 }
 
-# Moving the Apple identity off disk needs a driver whose sender follows the
-# identity contract. An older sender finds certificate.pem missing and makes
-# a self-signed pair under the Apple identity's names.
+# Moving the Apple identity off disk needs a radio backend whose sender
+# follows the identity contract. An older sender finds certificate.pem missing
+# and makes a self-signed pair under the Apple identity's names.
 driver_identity_ready() {
   local installed
-  if radio_probe; then
-    radio_probe_hung && die "$(radio_probe_hung_say)"
-    # A backend states which omdrop-awdl helper contract it follows.
-    installed=$(probe_field contract)
-    if [[ -z "$installed" ]] || (( $(vercmp "$installed" "$DRIVER_IDENTITY_VERSION") < 0 )); then
-      die "Keeping the identity in 1Password needs a radio backend that follows contract $DRIVER_IDENTITY_VERSION or newer ($(probe_field backend) follows ${installed:-none})."
-    fi
-    return 0
-  fi
-  installed=$(pacman -Q "$DRIVER_PKG" 2>/dev/null) || installed=
-  installed=${installed##* }
-  if [[ -z "$installed" ]] || (( $(vercmp "$installed" "$DRIVER_IDENTITY_VERSION") < 0 )); then
-    die "Keeping the identity in 1Password needs driver $DRIVER_IDENTITY_VERSION or newer (installed: ${installed:-none}). Update it with: omdrop install-driver"
-  fi
+  radio_probe \
+    || die "Keeping the identity in 1Password needs the radio backend ($BACKEND_PKG). Install it with: omdrop install-driver"
+  radio_probe_hung && die "$(radio_probe_hung_say)"
+  # A backend states which omdrop-awdl helper contract it follows.
+  installed=$(probe_field contract)
+  version_ge "$installed" "$IDENTITY_CONTRACT_MIN" \
+    || die "Keeping the identity in 1Password needs a radio backend that follows contract $IDENTITY_CONTRACT_MIN or newer ($(probe_field backend) follows ${installed:-none}). $(radio_update)"
+}
+
+# Debian's version order, from dpkg, which every Ubuntu machine has. An empty
+# version is older than everything.
+version_ge() {
+  [[ -n "$1" ]] && dpkg --compare-versions "$1" ge "$2"
 }
 
 # Write the receiving service from this plugin's template when the installed
@@ -628,6 +636,61 @@ unit_install() {
   return "$changed"
 }
 
+# The panel is a GNOME Shell extension in this checkout's extension/ folder.
+# It is linked into the user's extensions rather than copied, so an update to
+# the checkout updates it too, and the same rule as the command applies: only
+# an absent entry, a dangling link or a link to another checkout's extension
+# is replaced. It is enabled once, when the link is first made; after that,
+# switching it off in Extensions is the user's choice and setup leaves it be.
+# GNOME Shell on Wayland finds an extension it did not start with only at the
+# next login. Returns 0 when it changed something.
+EXT_UUID=omdrop@cyborgcode.github.io
+extension_install() {
+  local plugin=$1 link raw
+  [[ -r "$plugin/extension/metadata.json" ]] || return 1
+  link="$(data_home)/gnome-shell/extensions/$EXT_UUID"
+  if [[ -L "$link" ]]; then
+    raw=$(readlink "$link")
+    [[ "$raw" == "$plugin/extension" ]] && return 1
+    if [[ -e "$link" && "$raw" != */extension ]]; then
+      echo "Left $link alone: it points at $raw." >&2
+      return 1
+    fi
+  elif [[ -e "$link" ]]; then
+    echo "Left $link alone: it is not a link omdrop made." >&2
+    return 1
+  fi
+  if ! { mkdir -p "$(dirname "$link")" && ln -sfn "$plugin/extension" "$link"; }; then
+    echo "omdrop could not link its GNOME Shell extension at $link." >&2
+    return 1
+  fi
+  echo "Installed the Omdrop panel, a GNOME Shell extension."
+  if extension_enable "$EXT_UUID"; then
+    echo "Enabled it. Log out and back in once, and its icon appears in the top bar."
+  else
+    echo "Enable it in the Extensions app, or with: gnome-extensions enable $EXT_UUID" >&2
+  fi
+  return 0
+}
+
+# Add an extension to GNOME Shell's enabled list (and take it off the disabled
+# one). Fails where there is no GNOME Shell schema to write to.
+extension_enable() {
+  python3 -c '
+import sys
+from gi.repository import Gio
+source = Gio.SettingsSchemaSource.get_default()
+if source is None or source.lookup("org.gnome.shell", True) is None:
+    sys.exit(2)
+settings = Gio.Settings.new("org.gnome.shell")
+enabled = settings.get_strv("enabled-extensions")
+if sys.argv[1] not in enabled:
+    settings.set_strv("enabled-extensions", enabled + [sys.argv[1]])
+settings.set_strv("disabled-extensions",
+                  [u for u in settings.get_strv("disabled-extensions") if u != sys.argv[1]])
+Gio.Settings.sync()' "$1" 2>/dev/null
+}
+
 # Everything `setup` installs, each step idempotent. Returns 0 when it changed
 # something, 1 when everything was already in place. Shared with require_unit,
 # so the first `omdrop on` sets up a fresh install without being asked.
@@ -641,26 +704,28 @@ setup_install() {
     echo "Set up the service that receives files."
   fi
 
-  # Put `omdrop` on the user's PATH. The plugin manifest has no way to declare
-  # a command -- schema 1 knows bar widgets, services and overlays, not binaries
-  # -- so nothing else does this, and every command in the README is unusable
-  # until something does. ~/.local/bin is on PATH by default on Omarchy.
+  # Put `omdrop` on the user's PATH. ~/.local/bin is on PATH on Ubuntu once
+  # it exists (~/.profile adds it at login).
   #
-  # A symlink rather than a copy, so an update to the plugin updates the
-  # command too. Only ever replaced when it points into a plugin directory or
-  # is dangling: a user who put their own omdrop there outranks us.
+  # A symlink rather than a copy, so an update to the checkout updates the
+  # command too. Only ever replaced when it points at another checkout's
+  # bin/omdrop or is dangling: a user who put their own omdrop there
+  # outranks us.
   local bindir="${XDG_BIN_HOME:-$HOME/.local/bin}" link current=''
   link="$bindir/omdrop"
   [[ -e "$link" || -L "$link" ]] && current=$(readlink -f "$link" 2>/dev/null)
-  if [[ -z "$current" || "$current" == */plugins/*/bin/omdrop ]]; then
+  if [[ -z "$current" || "$current" == */bin/omdrop || ( -L "$link" && ! -e "$link" ) ]]; then
     if mkdir -p "$bindir" && ln -sfn "$plugin/bin/omdrop" "$link"; then
       [[ "$current" == "$plugin/bin/omdrop" ]] || { did=1; echo "Put the omdrop command on your PATH at $link."; }
     else
       echo "omdrop could not create $link, so the omdrop command is not on your PATH. Create it by hand: ln -s $plugin/bin/omdrop $link" >&2
     fi
-  elif [[ "$current" != "$plugin/bin/omdrop" ]]; then
+  else
     echo "Left $link alone: it is not ours and points at $current." >&2
   fi
+
+  # The panel, a GNOME Shell extension.
+  extension_install "$plugin" && did=1
 
   # Received links are stored as .url files, and a Mac may send a .webloc.
   # Without this, double-clicking one opens it in a text editor.
@@ -703,7 +768,7 @@ cmd_setup() {
     printf '\nNot ready to receive yet:\n'
     printf -- '  - %s\n' "${missing[@]}"
   else
-    printf '\nReady. Turn receiving on from the bar, or run: omdrop on\n'
+    printf '\nReady. Turn receiving on from the top bar, or run: omdrop on\n'
   fi
   skills_offer
 }
@@ -718,27 +783,13 @@ cmd_setup() {
 # installed the plugin before the driver.
 # Each line is "id<TAB>sentence": the id is for the panel, which offers to fix
 # the one thing it can, and the sentence is for the person reading it.
-# Broadcom (vendor 0x14e4) network hardware on PCI, which is where Apple's
-# Wi-Fi sits on Apple Silicon. Without it the driver cannot help: a VM such as
-# Try Omarchy, or another laptop, has no AWDL-capable radio to configure, and
-# building a kernel module there only fails.
-apple_broadcom_wifi() {
-  local d
-  # OMDROP_SYSFS lets the tests describe the hardware instead of depending on
-  # the machine they run on.
-  for d in "${OMDROP_SYSFS:-/sys}"/bus/pci/devices/*; do
-    [[ "$(cat "$d/vendor" 2>/dev/null)" == 0x14e4 && "$(cat "$d/class" 2>/dev/null)" == 0x0280* ]] && return 0
-  done
-  return 1
-}
-
-# The radio half is a separate package: omdrop-awdl for Apple's Broadcom Wi-Fi,
-# or another radio backend. A backend may describe itself through
-# `omdrop-discoverable probe --json`, run unprivileged (docs/radio-backend.md).
-# One that does owns the hardware and installation checks for its own radio;
-# one that does not is taken to be omdrop-awdl on Apple's Broadcom Wi-Fi and
-# gets the checks below, unchanged. omdrop-awdl answers a subcommand it does
-# not know with its usage and exit 2, which is how it reads as "no probe".
+# The radio half is a separate package. On Ubuntu that is omdrop-owl, which
+# `omdrop install-driver` builds from a pinned commit. A backend describes
+# itself through `omdrop-discoverable probe --json`, run unprivileged
+# (docs/radio-backend.md), and owns the hardware and installation checks for
+# its own radio. A helper that does not answer the probe -- omdrop-awdl, the
+# Broadcom driver for Apple Silicon under Arch -- is not one this port drives,
+# and doctor says so.
 
 # The probe reads a few files and answers. One that hangs would hang doctor
 # with it, and the panel waiting on doctor, so it gets this long. timeout puts
@@ -755,6 +806,29 @@ BACKEND_CONTRACT_MIN=0.7.0
 # item under one of these names is passed on as backend-<id>, so its sentence
 # still shows but no button offers a fix that cannot fix it.
 PLUGIN_ITEM_IDS="driver library service"
+# The first omdrop-awdl helper contract whose sender, send-to-peer and
+# advertiser follow docs/identity-contract.md. Moving the identity into
+# 1Password needs it.
+IDENTITY_CONTRACT_MIN=0.7.0
+
+# The radio backend for Ubuntu: omdrop-owl, which runs AWDL in userspace
+# through OWL on ordinary Wi-Fi cards. install-driver builds it from this exact
+# commit into a .deb and installs that with apt, so apt owns its files and
+# `sudo apt remove omdrop-owl` takes them all away again. A branch name would
+# let the built source drift from what anyone reviewed, so it is the full SHA,
+# bumped in the same commit as BACKEND_VERSION, the version it builds.
+BACKEND_PKG=omdrop-owl
+BACKEND_REPO=https://github.com/t4t5/omdrop-owl.git
+BACKEND_COMMIT=2b45e615f5e25c855374a46ab59612011878bc2e
+BACKEND_VERSION=0.2.0
+# What omdrop-owl's tools/build-deb.sh needs to build it.
+BACKEND_BUILD_PKGS="build-essential cmake git pkg-config dpkg-dev libev-dev libpcap-dev libnl-3-dev libnl-genl-3-dev libnl-route-3-dev"
+
+# Whether the backend is new enough: omdrop-owl at least the version pinned
+# above. Another backend that probes answers for itself, through its contract.
+backend_current() {
+  [[ "$(probe_field backend)" != owl ]] || version_ge "$(probe_field version)" "$BACKEND_VERSION"
+}
 
 # RADIO_PROBE: empty until asked, then `none` (omdrop-awdl), `hung` (a helper
 # that did not answer in time) or the probe's JSON. A hung helper still counts
@@ -815,7 +889,7 @@ for m in json.loads(os.environ["PROBE"]).get("missing") or []:
 backend_contract_ok() {
   local contract
   contract=$(probe_field contract)
-  [[ -n "$contract" ]] && (( $(vercmp "$contract" "$BACKEND_CONTRACT_MIN") >= 0 ))
+  version_ge "$contract" "$BACKEND_CONTRACT_MIN"
 }
 
 backend_contract_say() {
@@ -825,13 +899,15 @@ backend_contract_say() {
 }
 
 # For messages that ask for a newer or missing radio helper: what provides
-# it, and how to update it. `omdrop install-driver` builds omdrop-awdl; a
-# backend that probes is a package of its own, which that command leaves alone.
+# it, and how to update it. install-driver rebuilds omdrop-owl at the pinned
+# commit; another backend that probes is a package of its own, left alone.
 radio_pkg() {
-  if radio_probe; then echo "radio backend"; else echo "Wi-Fi driver package"; fi
+  if radio_probe && [[ "$(probe_field backend)" != owl ]]; then echo "radio backend"
+  else echo "radio backend ($BACKEND_PKG)"
+  fi
 }
 radio_update() {
-  if radio_probe; then
+  if radio_probe && [[ "$(probe_field backend)" != owl ]]; then
     local backend
     backend=$(probe_field backend)
     echo "Update the package that provides it${backend:+ ($backend)}: omdrop install-driver leaves it alone."
@@ -858,20 +934,17 @@ prereqs_missing() {
     probe_missing
     receiver_libs_installed \
       || printf 'library\t%s\n' "Packages the receiver needs ($RECEIVER_PKGS) are not installed. The button below installs them."
+    backend_current \
+      || printf 'driver\t%s\n' "The installed $BACKEND_PKG ($(probe_field version)) is older than the $BACKEND_VERSION this version of Omdrop needs. The button below updates it."
     have_unit || printf 'service\t%s\n' "The service that receives files is not installed yet. Turning Omdrop on installs it."
     return 0
   fi
-  # First, and alone: nothing else on this list can be fixed on this machine.
-  if ! apple_broadcom_wifi; then
-    printf 'hardware\t%s\n' "This computer has no Apple Broadcom Wi-Fi, which Omdrop's own driver needs: it runs only on Apple Silicon Macs, not in a virtual machine. Other Wi-Fi cards need a different radio backend (docs/radio-backend.md)."
-    return 0
-  fi
   receiver_libs_installed \
-    || printf 'library\t%s\n' "Packages the receiver needs ($RECEIVER_PKGS) are not installed. The button below installs them along with the driver."
+    || printf 'library\t%s\n' "Packages the receiver needs ($RECEIVER_PKGS) are not installed. The button below installs them along with the radio backend."
   if [[ ! -x "$DISCOVERABLE" ]]; then
-    printf 'driver\t%s\n' "The Wi-Fi driver that makes this computer visible to Apple devices is not installed. It has to be installed as an administrator."
-  elif [[ ! -e /sys/class/net/awdl0 ]]; then
-    printf 'radio\t%s\n' "The driver is installed but its Apple-compatible radio is not running yet, so nobody can see this computer. Restarting usually brings it up."
+    printf 'driver\t%s\n' "The radio backend that makes this computer visible to Apple devices ($BACKEND_PKG) is not installed. Installing it needs your password."
+  else
+    printf 'driver\t%s\n' "The radio helper at $DISCOVERABLE did not say what it is, so it is not one Omdrop can drive on Ubuntu. The button below installs $BACKEND_PKG."
   fi
   have_unit || printf 'service\t%s\n' "The service that receives files is not installed yet. Turning Omdrop on installs it."
 }
@@ -952,160 +1025,107 @@ cmd_firewall() {
   esac
 }
 
-# Installing a kernel module is not something a bar widget may do quietly. This
-# follows Omarchy's own pattern for installing from a UI -- a floating terminal
-# running the command, the user's own sudo prompt, all output visible -- rather
-# than pkexec'ing a build script out of a plugin clone, which would be root
-# running user-writable code. makepkg refuses to run as root anyway.
-DRIVER_REPO=https://github.com/netmojo-systems/omdrop-awdl.git
-# The package name a repository would carry it under, and the fallback source.
-DRIVER_PKG=brcmfmac-awdl-dkms
-# The exact driver commit this release of the plugin builds. A branch name
-# would let the built source drift away from what anyone reviewed -- including
-# the marketplace, whose baseline refuses an unpinned remote build -- so the
-# checkout below is detached at this SHA and the build only runs if it
-# succeeded. Bump it, in the same commit, whenever the plugin needs a newer
-# driver: the full 40 characters, because a short SHA is not a pin.
-DRIVER_COMMIT=fe05b2c575db063c388abb0c31c840c03b1b6412
-# The package version that commit builds, with its pkgrel. install-driver
-# rebuilds any older installed driver: a fix inside the helper, such as 0.5.1's,
-# changes nothing a feature probe could see, and a packaging fix such as
-# 0.6.3-2's (the kernel headers became a dependency) changes only the pkgrel.
-DRIVER_VERSION=0.9.3
-# The first driver whose sender, send-to-peer and advertiser follow
-# docs/identity-contract.md. Moving the identity into 1Password needs it.
-DRIVER_IDENTITY_VERSION=0.7.0
-
+# Installing a radio backend is not something a panel may do quietly. Run
+# from a terminal, install-driver runs its script right there, at the person's
+# own sudo prompt. Run from the panel, it opens a terminal window that runs the
+# same script, so every step and its output is visible -- rather than pkexec'ing
+# a build script out of a user-writable clone, which would be root running
+# user-writable code.
+#
+# What it installs: the receiver's packages; omdrop-owl, built at the pinned
+# commit, when it is missing or older than the pin and no other backend
+# answers the probe; and the firewall rule when UFW is active.
 cmd_install_driver() {
-  local self_q
-  printf -v self_q '%q' "$0"
+  local self_q build="set -e" pkgs=() other_backend=0
+  printf -v self_q '%q' "$SELF"
   if radio_probe; then
-    install_for_backend
-    return
+    # Without an answer there is no telling whether this backend is one the
+    # plugin can work with, so nothing is installed for it.
+    radio_probe_hung && die "$(radio_probe_hung_say)"
+    [[ "$(probe_field backend)" == owl ]] || other_backend=1
+    # The plugin's part is still worth installing; another backend's update
+    # is not something this command can do.
+    backend_contract_ok || echo "$(backend_contract_say)" >&2
   fi
-  if [[ -x "$DISCOVERABLE" ]] && driver_current && receiver_libs_installed; then
-    echo "The driver and the Python library the receiver needs are both installed and current. Nothing to do."
-    return 0
-  fi
-  apple_broadcom_wifi \
-    || die "This computer has no Apple Broadcom Wi-Fi, which Omdrop's own driver needs: it runs only on Apple Silicon Macs, not in a virtual machine. Other Wi-Fi cards need a different radio backend (docs/radio-backend.md)."
-  # Into the cache directory, not a temp dir. Three reasons: someone who has
-  # just installed a kernel module as root should still have the source they
-  # built afterwards, /tmp is tmpfs on this hardware so the clone and the built
-  # package would sit in RAM until reboot, and a later version is then a pull
-  # rather than a fresh clone. Re-running this updates in place.
-  #
-  # Written as one script so the terminal shows exactly what it will run, and
-  # so a user without the launcher can paste the same thing.
-  local src="${XDG_CACHE_HOME:-$HOME/.cache}/omdrop/omdrop-awdl"
-  local build="set -e"
+  receiver_libs_installed || pkgs+=($RECEIVER_PKGS)
 
-  # The receiver's one outside import belongs to the receiver, not the kernel
-  # module, so a user who installed the driver and nothing else would get a
-  # working radio and a receiver that could not start. Install it here, from
-  # the official repositories by exact package name: pacman verifies what it
-  # installs, and nothing is built from a recipe fetched at install time.
-  # --needed leaves an installed copy alone; --asdeps because it is there for
-  # Omdrop, not something the user asked for by name.
-  if ! receiver_libs_installed; then
+  local backend_needed=0
+  if (( ! other_backend )) && { ! radio_probe || ! backend_current; }; then
+    backend_needed=1
+    pkgs+=($BACKEND_BUILD_PKGS)
+  fi
+  (( ${#pkgs[@]} )) && build="$build
+sudo apt-get install -y ${pkgs[*]}"
+
+  # Into the cache directory, not a temp dir: whoever has just installed
+  # something as root should still have the source they built, and a later
+  # version is then a fetch rather than a fresh clone. Re-running updates it.
+  if (( backend_needed )); then
+    local src="${XDG_CACHE_HOME:-$HOME/.cache}/omdrop/$BACKEND_PKG" src_q
+    printf -v src_q '%q' "$src"
     build="$build
-sudo pacman -S --needed --asdeps $RECEIVER_PKGS"
-  fi
-
-  # A repository that already carries the driver makes building it pointless:
-  # pacman installs a signed package in seconds, with no toolchain, no compile
-  # output to read, and nothing fetched at install time that a reviewer has not
-  # seen. Building stays for everyone whose repositories do not have it -- a
-  # plain Asahi Arch install, or before the package reaches their architecture.
-  #
-  # `pacman -Si` reads the sync databases already on disk. It deliberately does
-  # not refresh them: -Sy on its own is how partial upgrades happen, and a user
-  # who asked to install AirDrop did not ask to move their system's package
-  # state. A database that predates the package simply takes the build path.
-  # An installed driver older than this plugin needs is rebuilt from the pin
-  # too: that is the upgrade the "needs a newer driver" messages point at.
-  if [[ ! -x "$DISCOVERABLE" ]] || ! driver_current; then
-    if pacman -Si "$DRIVER_PKG" >/dev/null 2>&1; then
-      build="$build
-sudo pacman -S --needed --noconfirm $DRIVER_PKG"
-    else
-      build="$build
-mkdir -p \"\$(dirname '$src')\"
-if [ -d '$src/.git' ]; then
-  git -C '$src' fetch --quiet origin
-else
-  git clone --quiet $DRIVER_REPO '$src'
-fi
-echo 'Building driver commit $DRIVER_COMMIT'
-git -C '$src' checkout --detach fe05b2c575db063c388abb0c31c840c03b1b6412 && makepkg --dir '$src' -si"
-    fi
+mkdir -p \"\$(dirname $src_q)\"
+if [ -d $src_q/.git ]; then git -C $src_q fetch --quiet origin; else git clone --quiet $BACKEND_REPO $src_q; fi
+echo 'Building $BACKEND_PKG $BACKEND_VERSION at commit $BACKEND_COMMIT'
+git -C $src_q -c advice.detachedHead=false checkout --quiet --detach $BACKEND_COMMIT
+rm -f $src_q/${BACKEND_PKG}_*.deb
+$src_q/tools/build-deb.sh
+sudo apt-get install -y $src_q/${BACKEND_PKG}_*.deb"
   fi
 
   # Keep the receiver's firewall policy in this plugin, not in the reusable
-  # driver package. Running it in the same terminal means sudo normally reuses
-  # the authentication from pacman/makepkg instead of asking a second time.
-  if ufw_active; then
-    build="$build
-$self_q firewall install"
-  fi
-  if ! command -v omarchy-launch-floating-terminal-with-presentation >/dev/null 2>&1; then
-    echo "Omdrop requires a patched wifi driver, which requires administrative privilege to install. You will be prompted for your password."
-    echo
-    echo "Install the driver with:"
-    printf '\n%s\n\n' "$build"
-    return 0
-  fi
-  echo "Opening a terminal to install the driver."
-  # A subshell, so a failed step ends the script and not the terminal. With
-  # `set -e` at the top level of the launcher's shell, the first failure exited
-  # before the launcher's own "press any key" prompt, and the window closed
-  # with the error in it before anyone could read it. Exit 130 skips the
-  # launcher's "Done!", which a failure should not show.
-  #
-  # Tested on its own line, not with `||`: bash ignores `set -e` inside a
-  # subshell whose status a `||` is testing, so every step would run on
-  # regardless of the ones before it failing.
-  launch_install "$build" "Omdrop requires a patched wifi driver, which requires administrative privilege to install. You will be prompted for your password."
-}
-
-# With a radio backend that probes, the radio is that package's business: it
-# is installed (it answered), and it reports its own blockers through doctor.
-# What remains is this plugin's own part, the receiver's packages and its
-# firewall rule, run the same way as the driver install.
-install_for_backend() {
-  local build="set -e"
-  # Without an answer there is no telling whether this backend is one the
-  # plugin can work with, so nothing is installed for it.
-  radio_probe_hung && die "$(radio_probe_hung_say)"
-  # The plugin's part is still worth installing; the backend's update is not
-  # something this command can do.
-  backend_contract_ok || echo "$(backend_contract_say)" >&2
-  receiver_libs_installed || build="$build
-sudo pacman -S --needed --asdeps $RECEIVER_PKGS"
+  # backend package. Running it in the same script means sudo normally reuses
+  # the authentication from apt instead of asking a second time.
   ufw_active && build="$build
 $self_q firewall install"
+
   if [[ "$build" == "set -e" ]]; then
-    echo "The receiver's packages are installed and the radio comes from $(probe_field backend) $(probe_field version). Nothing to do."
+    if radio_probe; then
+      echo "The receiver's packages are installed and the radio comes from $(probe_field backend) $(probe_field version). Nothing to do."
+    else
+      echo "Nothing to install."
+    fi
     return 0
   fi
-  if ! command -v omarchy-launch-floating-terminal-with-presentation >/dev/null 2>&1; then
-    echo "Install what the receiver needs with:"
-    printf '\n%s\n\n' "$build"
-    return 0
-  fi
-  echo "Opening a terminal to install what the receiver needs."
-  launch_install "$build" "Omdrop needs a few packages for its receiver, which requires administrative privilege to install. You will be prompted for your password."
+  run_install "$build" "Omdrop needs a radio backend and a few packages for its receiver. Installing them needs administrative privilege, so you will be asked for your password."
 }
 
-# Run an install script in a floating terminal the user watches. A subshell,
-# so a failed step ends the script and not the terminal: with `set -e` at the
-# launcher's top level, the first failure closed the window before anyone
-# could read it. Exit 130 skips the launcher's "Done!".
-launch_install() {
+# Run an install script the person watches. In a terminal, right there, with
+# its exit status as ours. Otherwise (the panel) in a terminal window: a
+# subshell, so a failed step ends the script and not the window, which stays
+# open until a key is pressed so the outcome can be read. With no terminal to
+# open, the script is printed so it can be pasted.
+run_install() {
   local build=$1 intro=$2
-  local script="( $build
-); rc=\$?; if [ \$rc -ne 0 ]; then echo; echo \"Installing failed (exit \$rc). The messages above say why.\"; read -rsn 1 -p 'Press any key to close...' </dev/tty; echo; exit 130; fi"
-  omarchy-launch-floating-terminal-with-presentation "echo '$intro'; echo; $script"
+  if [[ -t 0 && -t 1 ]]; then
+    printf '%s\n\n' "$intro"
+    bash -c "$build"
+    return
+  fi
+  local intro_q; printf -v intro_q '%q' "$intro"
+  local script="echo $intro_q; echo; ( $build
+); rc=\$?; echo; if [ \$rc -eq 0 ]; then echo 'Done.'; else echo \"Installing failed (exit \$rc). The messages above say why.\"; fi; read -rsn 1 -p 'Press any key to close...' </dev/tty; echo"
+  if terminal_run bash -c "$script"; then
+    echo "Opened a terminal to install what Omdrop needs."
+  else
+    echo "$intro"
+    echo
+    echo "Install it with:"
+    printf '\n%s\n\n' "$build"
+  fi
+}
+
+# A terminal window running a command, in the desktop's chosen terminal:
+# xdg-terminal-exec where it is installed (Ubuntu 25.10 and newer), the Debian
+# alternative otherwise. Fails only when there is no terminal to open.
+terminal_run() {
+  if command -v xdg-terminal-exec >/dev/null 2>&1; then
+    launch xdg-terminal-exec "$@"
+  elif command -v x-terminal-emulator >/dev/null 2>&1; then
+    launch x-terminal-emulator -e "$@"
+  else
+    return 1
+  fi
 }
 
 cmd_on() {
@@ -1130,7 +1150,7 @@ cmd_on() {
 
   # Before anything is armed, so a rejected duration cannot leave the mode
   # changed and the window closed.
-  local dur=${1:-$DEFAULT_WINDOW} secs= mode=timed
+  local dur=${1:-$(default_window)} secs= mode=timed
   case "$dur" in
     forever) dur=; mode=forever ;;
     once)    dur=; mode=once ;;
@@ -1425,7 +1445,7 @@ cmd_status() {
     ON="$on" LEFT="$left" VIS="$vis" MODE="$mode" DIR="$(effective_dir)" \
     REASON="$reason" RXPROVEN="$rxproven" NAME="$(effective_name)" \
     AUDIENCE="$(cmd_visibility)" SENDERS="$(sender_count)" \
-    SOUND="$(sound_on && echo 1)" python3 -c '
+    SOUND="$(sound_on && echo 1)" WINDOW_DEFAULT="$(default_window)" python3 -c '
 import json, os
 left, vis = os.environ["LEFT"], os.environ["VIS"]
 print(json.dumps({
@@ -1440,6 +1460,8 @@ print(json.dumps({
     "reason": os.environ["REASON"] or None,
     "rx_proven": os.environ["RXPROVEN"] == "1",
     "sound": os.environ["SOUND"] == "1",
+    # What `on` opens with no duration, where the panel slider rests.
+    "window": os.environ["WINDOW_DEFAULT"],
     # Who may send: "everyone" or "contacts", with the allow-list size so the
     # panel can warn that an empty list refuses everybody.
     "visibility": os.environ["AUDIENCE"],
@@ -1529,15 +1551,6 @@ except (ValueError, AttributeError):
 # so, and asking it is cheaper than keeping a table of driver versions.
 sender_takes_several_files() {
   "$SENDER" --help 2>&1 | grep -qF '[file ...]'
-}
-
-# Whether the installed driver package is at least the one this plugin pins.
-# Read from pacman, because a helper fix is invisible from outside the helper.
-driver_current() {
-  local installed
-  installed=$(pacman -Q "$DRIVER_PKG" 2>/dev/null) || return 1
-  installed=${installed##* }
-  (( $(vercmp "$installed" "$DRIVER_VERSION") >= 0 ))
 }
 
 # What a send is of, in a few words: the file's name, or how many there are.
@@ -1869,7 +1882,7 @@ cmd_send() {
     [[ -n "$to" ]] || die "Omdrop is off, so no device can be heard. Name the device, and omdrop turns itself on to find it:
   omdrop send NAME$example
 Or turn it on first, with: omdrop on"
-    printf 'Omdrop is off. Turning it on for %s, so nearby devices can be heard...\n' "$DEFAULT_WINDOW"
+    printf 'Omdrop is off. Turning it on for %s, so nearby devices can be heard...\n' "$(default_window)"
     "$SELF" on >/dev/null || die "Omdrop could not be turned on, so nothing was sent."
     radio_on || die "Omdrop turned on, but the radio is not up yet, so nothing was sent. Try again in a few seconds."
     printf 'Omdrop is on, and visible nearby until the window ends. Turn it off sooner with: omdrop off\n'
@@ -2273,19 +2286,36 @@ is_link_file() { case "${1,,}" in *.url|*.webloc) return 0 ;; esac; return 1; }
 # Launch a GUI app so it OUTLIVES us. The watcher runs as a transient systemd
 # service, and a service's cgroup is killed when it exits -- taking any
 # setsid-detached child with it, which is why an opened image vanished before
-# it could map a window. uwsm-app puts the app in its own unit in app.slice,
-# which is what the rest of Omarchy does (see omarchy-launch-browser).
+# it could map a window. systemd-run puts the app in a unit of its own, in the
+# directory we are in, and returns once it has started.
 launch() {
-  # Synchronously, and NOT backgrounded: uwsm-app returns once the app has its
-  # own unit, and we must still be alive at that moment. Backgrounding it and
-  # exiting killed it in our cgroup before the handoff -- the app never
-  # appeared, silently.
-  if command -v uwsm-app >/dev/null 2>&1; then
-    uwsm-app -- "$@" || echo "omdrop: uwsm-app could not launch: $*" >&2
-  else
-    systemd-run --user --quiet --collect "$@" \
-      || echo "omdrop: could not launch: $*" >&2
+  systemd-run --user --quiet --collect --same-dir "$@" \
+    || echo "omdrop: could not launch: $*" >&2
+}
+
+# A desktop notification: TITLE BODY [IMAGE [FILE]]. With a FILE, clicking the
+# notification opens it. notify-send waits for that click, so it waits in a
+# unit of its own (`omdrop notify-wait`), which the watcher's exit cannot
+# take down. GNOME takes the action named "default" as a click on the
+# notification itself and draws no button for it.
+NOTIFY_ICON="$PROJ/extension/icons/omdrop-symbolic.svg"
+desktop_notify() {
+  local title=$1 body=$2 image=${3:-} file=${4:-}
+  command -v notify-send >/dev/null 2>&1 || return 1
+  if [[ -n "$file" ]]; then
+    launch "$SELF" notify-wait "$title" "$body" "$image" "$file"
+    return
   fi
+  notify-send --app-name=Omdrop --icon="$NOTIFY_ICON" ${image:+--hint="string:image-path:$image"} \
+    -- "$title" "$body" >/dev/null 2>&1
+}
+
+cmd_notify_wait() {
+  local title=$1 body=$2 image=$3 file=$4 action
+  action=$(notify-send --app-name=Omdrop --icon="$NOTIFY_ICON" ${image:+--hint="string:image-path:$image"} \
+             --action=default=Open -- "$title" "$body" 2>/dev/null) || return 0
+  [[ "$action" == default ]] && "$SELF" act open "$file"
+  return 0
 }
 
 act_open() {
@@ -2303,7 +2333,7 @@ act_open() {
 cmd_open_link() {
   local f=${1:?usage: omdrop open-link FILE} url raw why
   if url=$(link_target "$f"); then
-    omarchy-launch-browser "$url" >/dev/null 2>&1
+    launch xdg-open "$url"
     return
   fi
   if raw=$(link_url "$f") && [[ "$raw" == *:* ]]; then
@@ -2311,7 +2341,7 @@ cmd_open_link() {
   else
     why="There is no web link in it."
   fi
-  omarchy-notification-send "Can't open $(basename "$f")" "$why" >/dev/null 2>&1 \
+  desktop_notify "Can't open $(basename "$f")" "$why" \
     || echo "omdrop: can't open $f: $why" >&2
   return 1
 }
@@ -2434,7 +2464,7 @@ cmd_links() {
 }
 
 # The skill that tells an AI agent how to use omdrop, linked into the skill
-# directories Omarchy provisions for the agents it launches. Only directories
+# directories AI coding agents read. Only directories
 # that already exist: a missing one belongs to an agent that is not installed.
 #
 # Only `omdrop skill install` writes these links: never setup, never `on`. They
@@ -2455,9 +2485,9 @@ skills_offer() {
 }
 
 # An entry named omdrop is replaced only when it is absent, a dangling link,
-# or a link into some plugin's skills/omdrop -- the same rule as the command
-# on PATH. Judged by the link's own target, not its resolution: a plugin
-# directory can itself be a link into a source checkout. Anything else, a
+# or a link into some checkout's skills/omdrop -- the same rule as the command
+# on PATH. Judged by the link's own target, not its resolution: a checkout
+# can itself be reached through a link. Anything else, a
 # directory or a live link elsewhere, is left in place with a message.
 # Returns 0 when it linked anything, 1 when every entry was already current
 # or left in place, and 2 when a link could not be made.
@@ -2473,7 +2503,7 @@ skills_install() {
     if [[ -L "$link" ]]; then
       raw=$(readlink "$link")
       [[ "$raw" == "$plugin/skills/omdrop" ]] && continue
-      if [[ -e "$link" && "$raw" != */plugins/*/skills/omdrop ]]; then
+      if [[ -e "$link" && "$raw" != */skills/omdrop ]]; then
         echo "Left $link alone: it points at $raw." >&2
         continue
       fi
@@ -2493,7 +2523,7 @@ skills_install() {
   return "$changed"
 }
 
-# Removes only links into some plugin's skills/omdrop or this one's, live or
+# Removes only links into some checkout's skills/omdrop, live or
 # dangling. Fails if any of those could not be removed.
 skills_remove() {
   local dir link raw plugin failed=0
@@ -2502,7 +2532,7 @@ skills_remove() {
     link="$dir/omdrop"
     [[ -L "$link" ]] || continue
     raw=$(readlink "$link")
-    [[ "$raw" == */plugins/*/skills/omdrop || ( -n "$plugin" && "$raw" == "$plugin/skills/omdrop" ) ]] || continue
+    [[ "$raw" == */skills/omdrop || ( -n "$plugin" && "$raw" == "$plugin/skills/omdrop" ) ]] || continue
     rm -f "$link" || { echo "omdrop could not remove $link." >&2; failed=1; }
   done
   (( failed )) && return 1
@@ -2527,36 +2557,46 @@ cmd_skill() {
 # behind a click the user made on the notification.
 
 # Put the arrival on the clipboard as well as announcing it: a link as its URL,
-# an image as the image itself, anything else as its path. wl-copy forks a
-# server to own the selection, so it has to survive us -- launch() gives it its
-# own unit, the same reason the viewer needed one.
+# an image as the image itself, anything else as its path. GNOME owns the
+# clipboard, and Mutter offers background programs no protocol to set it (no
+# data-control), so the extension sets it, through its D-Bus method in GNOME
+# Shell's own process. Succeeds only when it was copied; with the extension
+# off, nothing is, and the notification says only where the file went.
 #
-# HEIC/HEIF/AVIF (what an iPhone sends since 0.16.0) is not a type anything
-# pastes, so it is decoded once to a JPEG and that goes on the clipboard (#62).
-# Any failure -- no heif-convert, a timeout, a nonzero exit, no output -- falls
-# back to copying the path, as before. The original is never touched.
+# HEIC/HEIF/AVIF (what an iPhone sends since omdrop 0.16.0) is not a type
+# anything pastes, so it is decoded once to a JPEG and that goes on the
+# clipboard (omdrop #62). Any failure -- no heif-convert, a timeout, a nonzero
+# exit, no output -- falls back to copying the path. The original is never
+# touched.
+CLIP_PATH=/io/github/cyborgcode/Omdrop
+CLIP_IFACE=io.github.cyborgcode.Omdrop
+clip_call() {
+  gdbus call --session --dest org.gnome.Shell --object-path "$CLIP_PATH" \
+    --method "$CLIP_IFACE.$1" "${@:2}" >/dev/null 2>&1
+}
+
 copy_to_clipboard() {
-  local f=$1 url tmp; url=$(link_target "$f")
-  command -v wl-copy >/dev/null 2>&1 || return 0
+  local f=$1 url tmp rc; url=$(link_target "$f")
+  command -v gdbus >/dev/null 2>&1 || return 1
   if [[ -n "$url" ]]; then
-    printf '%s' "$url" | launch wl-copy
+    clip_call CopyText "$url"
     return
   fi
   case "${f,,}" in
-    *.png)  launch wl-copy --type image/png  < "$f" ;;
-    *.jpg|*.jpeg) launch wl-copy --type image/jpeg < "$f" ;;
-    *.gif)  launch wl-copy --type image/gif  < "$f" ;;
-    *.webp) launch wl-copy --type image/webp < "$f" ;;
+    *.png)  clip_call CopyFile "$f" image/png ;;
+    *.jpg|*.jpeg) clip_call CopyFile "$f" image/jpeg ;;
+    *.gif)  clip_call CopyFile "$f" image/gif ;;
+    *.webp) clip_call CopyFile "$f" image/webp ;;
     *.heic|*.heif|*.avif)
       if tmp=$(heif_to_jpeg "$f"); then
-        # The redirect holds the JPEG open for wl-copy, so removing the
+        # The call returns once the shell has read the JPEG, so removing the
         # directory afterwards is safe and leaves nothing behind.
-        launch wl-copy --type image/jpeg < "$tmp/clip.jpg"
+        clip_call CopyFile "$tmp/clip.jpg" image/jpeg; rc=$?
         rm -rf -- "$tmp"
-      else
-        printf '%s' "$f" | launch wl-copy
-      fi ;;
-    *)      printf '%s' "$f" | launch wl-copy ;;
+        return "$rc"
+      fi
+      clip_call CopyText "$f" ;;
+    *)      clip_call CopyText "$f" ;;
   esac
 }
 
@@ -2587,27 +2627,12 @@ heif_to_jpeg() {
 }
 
 act_notify() {
-  local f=$1 args=()
-  copy_to_clipboard "$f"
+  local f=$1 image=
   # Only images get a thumbnail, the way a screenshot notification does.
-  case "${f,,}" in *.png|*.jpg|*.jpeg|*.gif|*.webp|*.heic|*.avif) args+=(--image "$f") ;; esac
-  # Same shape as omarchy-capture-screenshot: clipboard plus file, a thumbnail,
-  # and the whole toast clickable. The notification service honours exactly one
-  # action -- the default, fired by clicking the body -- and --exec is how
-  # Omarchy's own toasts use it.
-  #
-  # -t 8000 is a deliberate number, not the default. The shell treats
-  # expire_timeout as a FLOOR, not a ceiling: durationFor() is
-  # max(lowPopupDuration=5000, requested) for low urgency, so the toast was
-  # already holding 5.1 s (measured off NotificationClosed, reason 1) and
-  # asking for 5000 would have changed nothing. This toast is the only place
-  # the name of what landed appears, and the only thing to click to open it,
-  # so it gets 8 s -- what a normal-urgency toast would get -- without
-  # claiming the urgency of one.
+  case "${f,,}" in *.png|*.jpg|*.jpeg|*.gif|*.webp|*.heic|*.avif) image=$f ;; esac
   local what="Saved to $(tildify "$(dirname "$f")")/"
-  command -v wl-copy >/dev/null 2>&1 && what="Copied to clipboard, saved to $(tildify "$(dirname "$f")")/"
-  omarchy-notification-send -t 8000 "$(basename "$f")" "$what (or click this)" \
-    "${args[@]}" --exec "$SELF" act open "$f" >/dev/null \
+  copy_to_clipboard "$f" && what="Copied to clipboard, saved to $(tildify "$(dirname "$f")")/"
+  desktop_notify "$(basename "$f")" "$what (or click this)" "$image" "$f" \
     || echo "omdrop: notification failed for $f" >&2
 }
 
@@ -2619,7 +2644,7 @@ cmd_act() {
   local dir; dir=$(dirname "$f")
   case "$what" in
     open)   act_open "$f" ;;
-    shell)  ( cd "$dir" && launch "$(omarchy-default-terminal)" ) ;;
+    shell)  ( cd "$dir" && terminal_run "${SHELL:-bash}" ) || die "There is no terminal to open." ;;
     browse) launch xdg-open "$dir" ;;
     *) die "act $what: one of open, shell, browse" ;;
   esac
@@ -2682,6 +2707,21 @@ systemctl --user status $UNIT"
     fi
   fi
   printf 'Files will land in %s\n' "$new"
+}
+
+# The window `on` opens when given no duration, and the panel's slider. Checked
+# the way `on` checks a duration, so a saved value is always one `on` accepts.
+cmd_window() {
+  case "${1:-}" in
+    "") default_window ;;
+    once|forever) setting_set window "$1" ;;
+    *)
+      [[ "$1" =~ ^[0-9]+(s|sec|m|min|h|hour|d|day)?$ ]] \
+        || die "window $1: a time span such as 10m or 1h, or \"once\" or \"forever\""
+      local w=$1; [[ "$w" =~ ^[0-9]+$ ]] && w="${w}m"
+      [[ -n "$(span_seconds "$w")" ]] || die "window $1: could not read that as a time span"
+      setting_set window "$w" ;;
+  esac
 }
 
 # The radar's sound effects. Off is remembered, so the panel is quiet from the
@@ -2851,6 +2891,7 @@ case "${1:-status}" in
   name)   shift; cmd_name "$@" ;;
   dir)    shift; cmd_dir "$@" ;;
   sound)  shift; cmd_sound "$@" ;;
+  window) shift; cmd_window "$@" ;;
   limit)  shift; cmd_limit "$@" ;;
   visibility|vis|viz) shift; cmd_visibility "$@" ;;
   senders) shift; cmd_senders "$@" ;;
@@ -2865,6 +2906,7 @@ case "${1:-status}" in
   act)    shift; cmd_act "$@" ;;
   watch)  shift; cmd_watch "$@" ;;
   handle) shift; cmd_handle "$@" ;;
+  notify-wait) shift; cmd_notify_wait "$@" ;;
   -V|--version|version) printf 'omdrop %s\n' "$(omdrop_version)" ;;
   -h|--help|help) usage ;;
   *)      usage >&2; exit 1 ;;

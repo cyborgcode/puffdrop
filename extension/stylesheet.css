@@ -1,0 +1,183 @@
+/* Omdrop's menu. Colours come from the shell theme wherever they can, so
+   it reads right in light and dark styles; the few fixed ones are chosen to
+   hold contrast on both. */
+
+.omdrop-menu .popup-menu-content {
+  width: 23em;
+}
+
+.omdrop-hero {
+  spacing: 12px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.omdrop-hero-icon {
+  icon-size: 32px;
+}
+
+.omdrop-state {
+  font-size: 1.2em;
+  font-weight: bold;
+}
+
+.omdrop-countdown {
+  font-size: 0.8em;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.omdrop-holder {
+  spacing: 8px;
+}
+
+.omdrop-detail,
+.omdrop-caption {
+  font-size: 0.9em;
+}
+
+.omdrop-caption {
+  font-size: 0.85em;
+}
+
+.omdrop-urgent {
+  color: #ed333b;
+}
+
+.omdrop-bold {
+  font-weight: bold;
+}
+
+.omdrop-header {
+  font-size: 0.8em;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.omdrop-window-value {
+  font-size: 0.9em;
+}
+
+.omdrop-slider-row {
+  padding-top: 0;
+}
+
+.omdrop-small-icon {
+  icon-size: 16px;
+}
+
+.omdrop-audience {
+  spacing: 6px;
+}
+
+.omdrop-tab {
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.8em;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.omdrop-tab:hover,
+.omdrop-tab:focus {
+  background-color: rgba(128, 128, 128, 0.18);
+}
+
+/* The chosen tab is lit; the others are dimmed in extension.js. */
+.omdrop-tab:checked {
+  color: -st-accent-fg-color;
+  background-color: -st-accent-color;
+}
+
+.omdrop-tab-box,
+.omdrop-senders-button-box {
+  spacing: 6px;
+}
+
+.omdrop-senders-count {
+  font-weight: bold;
+}
+
+.omdrop-entry {
+  width: 0;
+}
+
+.omdrop-install,
+.omdrop-dir {
+  padding: 6px 10px;
+}
+
+.omdrop-dir-label {
+  padding-left: 8px;
+}
+
+.omdrop-dots {
+  min-width: 1.5em;
+}
+
+.omdrop-radar {
+  width: 240px;
+  height: 240px;
+}
+
+.omdrop-radar-item {
+  padding-top: 4px;
+}
+
+.omdrop-radar-scope {
+  font-size: 0.85em;
+}
+
+.omdrop-radar-mute {
+  border-radius: 99px;
+  padding: 3px;
+}
+
+.omdrop-radar-mute:focus {
+  border: 1px solid -st-accent-color;
+}
+
+.omdrop-radar-mute-icon {
+  icon-size: 14px;
+}
+
+.omdrop-peer {
+  transition-duration: 1400ms;
+}
+
+/* A new arrival is noticed without being looked for: lit, then fading. */
+.omdrop-peer-flash {
+  background-color: rgba(128, 128, 128, 0.45);
+  transition-duration: 120ms;
+}
+
+.omdrop-peer-status {
+  padding-top: 2px;
+}
+
+.omdrop-cancel {
+  border-radius: 99px;
+  padding: 2px;
+}
+
+.omdrop-cancel:hover,
+.omdrop-cancel:focus {
+  background-color: rgba(128, 128, 128, 0.25);
+}
+
+.omdrop-track {
+  height: 3px;
+  margin-top: 4px;
+  border-radius: 2px;
+  background-color: rgba(128, 128, 128, 0.3);
+}
+
+.omdrop-track-fill {
+  border-radius: 2px;
+  background-color: -st-accent-color;
+}
+
+.omdrop-sender-row {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
