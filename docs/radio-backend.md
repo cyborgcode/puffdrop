@@ -1,6 +1,6 @@
 # Radio backends
 
-Omdrop is two packages. This plugin is the panel, the `omdrop` command and the
+Puffdrop is two packages. This plugin is the panel, the `puffdrop` command and the
 receiver (`airdrop-serve.py`, on `awdl0`, TCP 8771). The **radio backend** makes
 `awdl0` exist and makes this machine visible on it. The original backend is
 [omdrop-awdl](https://github.com/netmojo-systems/omdrop-awdl), for the Broadcom
@@ -25,7 +25,7 @@ environment, so a helper works from fixed paths.
 | `peers` | One line per AWDL peer heard: `<mac> rssi=<n>` (`rssi=?` when unknown). `send-to-peer` merges in the permanent IPv6 neighbours on `awdl0`. | 0, or 4 (radio down) |
 | `probe --json` | Optional and unprivileged; see below. | 0 |
 
-The backend also provides `send-to-peer`, which `omdrop send` and `omdrop peers`
+The backend also provides `send-to-peer`, which `puffdrop send` and `puffdrop peers`
 call. omdrop-awdl's needs nothing from Broadcom, so another backend can ship it
 unchanged next to its own `omdrop-discoverable`.
 
@@ -50,10 +50,10 @@ with its usage and exit 2) gets those checks, unchanged.
 
 It must answer within 5 seconds. A helper that doesn't is reported as a
 `backend` item ("The radio backend did not answer…") and nothing else, not
-taken for omdrop-awdl, and `omdrop install-driver` refuses to run.
+taken for omdrop-awdl, and `puffdrop install-driver` refuses to run.
 
 - `backend` (required), `version`: shown to people, for example by
-  `omdrop install-driver` and in messages that ask for a newer backend. An
+  `puffdrop install-driver` and in messages that ask for a newer backend. An
   answer without `backend` doesn't count as a probe.
 - `contract`: the omdrop-awdl version whose helper contract this backend follows.
   It must be at least the plugin's minimum (`BACKEND_CONTRACT_MIN` in
@@ -71,7 +71,7 @@ taken for omdrop-awdl, and `omdrop install-driver` refuses to run.
 
 `driver`, `library` and `service` belong to the plugin, and the panel acts on
 them: it offers its install button for `driver` and `library`, and that button
-runs `omdrop install-driver`, which can't fix anything of a backend's. A
+runs `puffdrop install-driver`, which can't fix anything of a backend's. A
 backend's item under one of these IDs is shown as `backend-<id>`, without the
 button. Use your own IDs instead, such as `radio`.
 
@@ -79,8 +79,8 @@ The plugin adds its own items after the backend's: `library` (the receiver's
 packages) and `service` (the receiving service). It reports `backend` itself
 when the probe doesn't answer or the contract is too old.
 
-With a probing backend, `omdrop install-driver` installs only what belongs to
+With a probing backend, `puffdrop install-driver` installs only what belongs to
 the plugin: the receiver's packages, and its firewall rule when ufw is active.
 The backend is a package of its own, installed before the plugin can ask it
 anything, so messages that ask for a newer helper name the backend's package
-instead of `omdrop install-driver`.
+instead of `puffdrop install-driver`.

@@ -17,7 +17,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OMDROP = ROOT / "bin" / "omdrop"
+OMDROP = ROOT / "bin" / "puffdrop"
 
 
 class WindowModeTests(unittest.TestCase):
@@ -31,7 +31,7 @@ class WindowModeTests(unittest.TestCase):
                         OMDROP_DISCOVERABLE="/nonexistent")
 
     def status(self, watch_exec, timer_active=False):
-        """`omdrop status --json` against a stubbed systemd."""
+        """`puffdrop status --json` against a stubbed systemd."""
         # The receiver is active (so there is a window to describe) and the
         # window timer is not, which is the state both non-timed modes share.
         script = f"""#!/bin/sh
@@ -54,9 +54,9 @@ exit 0
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return json.loads(result.stdout)
 
-    ONCE = "{ path=/usr/bin/omdrop ; argv[]=/usr/bin/omdrop watch --once ; ignore_errors=no }"
-    OPEN = "{ path=/usr/bin/omdrop ; argv[]=/usr/bin/omdrop watch ; ignore_errors=no }"
-    TIMED = "{ path=/usr/bin/omdrop ; argv[]=/usr/bin/omdrop watch --window 10m ; ignore_errors=no }"
+    ONCE = "{ path=/usr/bin/puffdrop ; argv[]=/usr/bin/puffdrop watch --once ; ignore_errors=no }"
+    OPEN = "{ path=/usr/bin/puffdrop ; argv[]=/usr/bin/puffdrop watch ; ignore_errors=no }"
+    TIMED = "{ path=/usr/bin/puffdrop ; argv[]=/usr/bin/puffdrop watch --window 10m ; ignore_errors=no }"
 
     def test_a_one_file_window_is_reported_as_one_file(self):
         # The regression: this answered "forever", so the panel's duration row

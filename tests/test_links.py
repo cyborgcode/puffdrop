@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OMDROP = ROOT / "bin" / "omdrop"
+OMDROP = ROOT / "bin" / "puffdrop"
 
 
 class LinkFixture(unittest.TestCase):
@@ -26,11 +26,15 @@ class LinkFixture(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.log = self.root / "log"
-        # The browser and the notifier record what they were asked to do.
-        for name in ("omarchy-launch-browser", "omarchy-notification-send"):
-            path = self.bin / name
-            path.write_text(f'#!/bin/sh\nprintf "{name}|%s\\n" "$1" >> "$LOG"\n')
-            path.chmod(0o755)
+        # What is launched (through systemd-run) and what is announced
+        # (through notify-send) is recorded rather than done.
+        launcher = self.bin / "systemd-run"
+        launcher.write_text('#!/bin/sh\nwhile [ "${1#--}" != "$1" ]; do shift; done\n'
+                            'printf "launch|%s\\n" "$*" >> "$LOG"\n')
+        launcher.chmod(0o755)
+        notifier = self.bin / "notify-send"
+        notifier.write_text('#!/bin/sh\nprintf "notify-send|%s\\n" "$*" >> "$LOG"\n')
+        notifier.chmod(0o755)
         self.env = os.environ.copy()
         self.env.update(
             PATH=f"{self.bin}:{self.env['PATH']}",
@@ -58,7 +62,7 @@ class OpenLinkTests(LinkFixture):
         result = self.run_omdrop("open-link", str(link))
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.logged(), ["omarchy-launch-browser|https://example.com/a?b=1"])
+        self.assertEqual(self.logged(), ["launch|xdg-open https://example.com/a?b=1"])
 
     def test_a_url_line_outside_the_shortcut_section_is_not_the_link(self):
         link = self.url_file("[Other]\nURL=https://decoy.example/\n"
@@ -66,7 +70,7 @@ class OpenLinkTests(LinkFixture):
 
         self.run_omdrop("open-link", str(link))
 
-        self.assertEqual(self.logged(), ["omarchy-launch-browser|https://example.com/"])
+        self.assertEqual(self.logged(), ["launch|xdg-open https://example.com/"])
 
     def test_a_link_that_is_not_a_web_page_is_refused_with_a_notification(self):
         for url in ("file:///etc/passwd", "smb://server/share", "x-app://run", "javascript:alert(1)",
@@ -80,7 +84,7 @@ class OpenLinkTests(LinkFixture):
                 self.assertNotEqual(result.returncode, 0)
                 logged = self.logged()
                 self.assertEqual(len(logged), 1, logged)
-                self.assertTrue(logged[0].startswith("omarchy-notification-send|"), logged)
+                self.assertTrue(logged[0].startswith("notify-send|"), logged)
 
     def test_a_webloc_opens_whether_xml_or_binary(self):
         for fmt in (plistlib.FMT_XML, plistlib.FMT_BINARY):
@@ -92,7 +96,7 @@ class OpenLinkTests(LinkFixture):
                 result = self.run_omdrop("open-link", str(link))
 
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(self.logged(), ["omarchy-launch-browser|https://example.com/?a=1&b=2"])
+                self.assertEqual(self.logged(), ["launch|xdg-open https://example.com/?a=1&b=2"])
 
     def test_a_webloc_pointing_at_a_file_is_refused(self):
         link = self.root / "local.webloc"
@@ -101,14 +105,14 @@ class OpenLinkTests(LinkFixture):
         result = self.run_omdrop("open-link", str(link))
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn("omarchy-launch-browser", self.log.read_text())
+        self.assertNotIn("xdg-open", self.log.read_text())
 
     def test_the_notification_click_uses_the_same_gate(self):
         link = self.url_file("[InternetShortcut]\nURL=file:///etc/passwd\n")
 
         self.run_omdrop("act", "open", str(link))
 
-        self.assertNotIn("omarchy-launch-browser", self.log.read_text())
+        self.assertNotIn("xdg-open", self.log.read_text())
 
 
 @unittest.skipUnless(all(shutil.which(t) for t in
@@ -121,13 +125,13 @@ class LinkHandlerInstallTests(LinkFixture):
 
     def test_remove_undoes_install(self):
         self.assertEqual(self.run_omdrop("links", "install").returncode, 0)
-        self.assertIn("application/x-webloc=netmojo.omdrop-links.desktop", self.mimeapps())
+        self.assertIn("application/x-webloc=io.github.cyborgcode.puffdrop-links.desktop", self.mimeapps())
 
         self.run_omdrop("links", "remove")
 
-        self.assertNotIn("netmojo.omdrop-links.desktop", self.mimeapps())
-        self.assertFalse((self.root / "data" / "applications" / "netmojo.omdrop-links.desktop").exists())
-        self.assertFalse((self.root / "data" / "mime" / "packages" / "netmojo.omdrop-webloc.xml").exists())
+        self.assertNotIn("io.github.cyborgcode.puffdrop-links.desktop", self.mimeapps())
+        self.assertFalse((self.root / "data" / "applications" / "io.github.cyborgcode.puffdrop-links.desktop").exists())
+        self.assertFalse((self.root / "data" / "mime" / "packages" / "io.github.cyborgcode.puffdrop-webloc.xml").exists())
 
     def test_a_default_the_user_chose_survives_install_and_remove(self):
         config = self.root / "config"

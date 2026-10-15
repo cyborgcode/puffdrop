@@ -168,7 +168,7 @@ class LifecycleFixture(unittest.TestCase):
         return path.read_text().splitlines() if path.exists() else []
 
     def on(self):
-        """`omdrop on`'s identity steps: begin, then window with the seq it got."""
+        """`puffdrop on`'s identity steps: begin, then window with the seq it got."""
         rc, out, err = self.run_cmd('begin', '--name', 'Test')
         self.assertEqual(rc, 0, err)
         begun = self.fields(out)
@@ -309,7 +309,7 @@ class OnePasswordWindowTests(LifecycleFixture):
             with self.subTest(argv):
                 rc, _, err = self.run_cmd(*argv)
                 self.assertEqual(rc, 1)
-                self.assertIn('Turn Omdrop off first', err)
+                self.assertIn('Turn Puffdrop off first', err)
 
     def test_lock_clears_the_cache(self):
         self.on()
@@ -336,13 +336,13 @@ class OnePasswordWindowTests(LifecycleFixture):
 
         def open_window_meanwhile(*a, **kw):
             files = real(*a, **kw)
-            # What `omdrop on` leaves while `use` talks to 1Password.
+            # What `puffdrop on` leaves while `use` talks to 1Password.
             ident._write_private(ident.User().window, 'source=self-signed\n')
             return files
         with unittest.mock.patch.object(lifecycle, 'op_read_files', open_window_meanwhile):
             rc, _, err = self.run_cmd('use', 'item1')
         self.assertEqual(rc, 1)
-        self.assertIn('Turn Omdrop off first', err)
+        self.assertIn('Turn Puffdrop off first', err)
 
     def test_use_is_refused_when_the_old_cache_cannot_be_cleared(self):
         self.on()

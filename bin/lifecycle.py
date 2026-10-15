@@ -31,7 +31,7 @@ FILES = ('certificate.pem', 'key.pem', 'validation_record.cms')
 # "certificate.pem[file]=" made a section "certificate" holding a file "pem".
 OP_NAMES = {'certificate.pem': 'certificate', 'key.pem': 'key',
             'validation_record.cms': 'validation_record'}
-DEFAULT_TITLE = 'Omdrop AirDrop identity'
+DEFAULT_TITLE = 'Puffdrop AirDrop identity'
 
 
 def now():
@@ -213,7 +213,7 @@ def item_ref(user):
                             ('identity_op_account', 'identity_op_vault', 'identity_op_item'))
     if not (vault and item):
         raise FetchFailed('No 1Password item configured',
-                          'run: omdrop identity 1password import')
+                          'run: puffdrop identity 1password import')
     return account, vault, item
 
 
@@ -365,7 +365,7 @@ def window_open(user):
 def cmd_lock(args, user):
     with ident._Flock(user.lock):
         if window_open(user):
-            warn('Turn Omdrop off first.')
+            warn('Turn Puffdrop off first.')
             return 1
         bump(user, 'gen')
         kill_fetch(user)
@@ -381,7 +381,7 @@ def cmd_lock(args, user):
 
 def cmd_unlock(args, user):
     if mode(user) != '1password':
-        warn('Omdrop is not set to use 1Password (identity_source is not 1password).')
+        warn('Puffdrop is not set to use 1Password (identity_source is not 1password).')
         return 1
     if current_cache(user) is not None:
         warn('The identity cache is already filled.')
@@ -391,7 +391,7 @@ def cmd_unlock(args, user):
         warn('Fetched the AirDrop identity from 1Password.')
         return 0
     warn({'superseded': 'Cancelled: the identity settings changed meanwhile.',
-          'window-open': 'Turn Omdrop off first.'}.get(outcome, f'Could not fetch: {describe(err)}'))
+          'window-open': 'Turn Puffdrop off first.'}.get(outcome, f'Could not fetch: {describe(err)}'))
     return 1
 
 
@@ -426,13 +426,13 @@ def cmd_status(args, user):
         if payload:
             lines.append(f"Cached from 1Password until {describe_expiry(payload['period_ends'])}")
         else:
-            lines.append('Nothing cached; the next `omdrop on` asks 1Password.')
+            lines.append('Nothing cached; the next `puffdrop on` asks 1Password.')
         if not info['op_installed']:
             lines.append('The 1Password CLI (op) is not installed.')
         if info['apple_files_on_disk']:
             lines.append('Apple identity files are still on disk: '
                          + ', '.join(info['apple_files_on_disk'])
-                         + ' (run: omdrop identity 1password import)')
+                         + ' (run: puffdrop identity 1password import)')
     elif disk['certificate'] and disk['key']:
         lines.append('Apple identity on disk.' if disk['record'] else 'Identity on disk.')
     lines.append('Self-signed identity: ' + ('present' if info['self_signed'] else 'not yet created'))
@@ -464,7 +464,7 @@ class Superseded(Exception):
 def _check_current(user, generation):
     """Under the lock: refuse if a window opened or the generation moved."""
     if window_open(user):
-        raise Superseded('Turn Omdrop off first.')
+        raise Superseded('Turn Puffdrop off first.')
     if counter(user, 'gen') != generation:
         raise Superseded('Cancelled: the identity settings changed meanwhile.')
 
@@ -504,7 +504,7 @@ def adopt(user, account, vault, item, generation):
 def cmd_import(args, user):
     with ident._Flock(user.lock):
         if window_open(user):
-            warn('Turn Omdrop off first.')
+            warn('Turn Puffdrop off first.')
             return 1
         generation = counter(user, 'gen')
     deadline = time.monotonic() + 5 * FETCH_SECONDS
@@ -553,7 +553,7 @@ def cmd_import(args, user):
                 save_item_ids(user, account, vault, item, generation)
             except OSError as e:
                 warn(f'Could not save the settings ({e}). The item is {item}; '
-                     f'run: omdrop identity 1password use {item}')
+                     f'run: puffdrop identity 1password use {item}')
                 return 1
             except Superseded as e:
                 warn(f'{e} The new 1Password item is {item}; nothing was deleted.')
@@ -581,14 +581,14 @@ def cmd_import(args, user):
         except FileNotFoundError:
             pass
     warn('Your Apple identity is now in 1Password, and the copies on disk were deleted. '
-         'The next `omdrop on` fetches it.')
+         'The next `puffdrop on` fetches it.')
     return 0
 
 
 def cmd_use(args, user):
     with ident._Flock(user.lock):
         if window_open(user):
-            warn('Turn Omdrop off first.')
+            warn('Turn Puffdrop off first.')
             return 1
         generation = bump(user, 'gen')
         kill_fetch(user)
@@ -614,14 +614,14 @@ def cmd_use(args, user):
     except Superseded as e:
         warn(str(e))
         return 1
-    warn('Omdrop now uses that 1Password item. The next `omdrop on` fetches it.')
+    warn('Puffdrop now uses that 1Password item. The next `puffdrop on` fetches it.')
     return 0
 
 
 def cmd_onepassword_off(args, user):
     with ident._Flock(user.lock):
         if window_open(user):
-            warn('Turn Omdrop off first.')
+            warn('Turn Puffdrop off first.')
             return 1
         bump(user, 'gen')
         kill_fetch(user)
@@ -630,7 +630,7 @@ def cmd_onepassword_off(args, user):
         except ident.KeyringError:
             pass
         setting_set(user, identity_source='self-signed')
-    warn('Omdrop no longer uses 1Password; the item in 1Password is kept.')
+    warn('Puffdrop no longer uses 1Password; the item in 1Password is kept.')
     return 0
 
 

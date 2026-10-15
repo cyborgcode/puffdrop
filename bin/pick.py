@@ -89,7 +89,7 @@ def run(bus, handle, start_call):
 
 
 def via_portal(bus, kind, start, title):
-    token = f"omdrop_{os.getpid()}"
+    token = f"puffdrop_{os.getpid()}"
     sender = bus.get_unique_name()[1:].replace(".", "_")
     handle = f"{PORTAL_PATH}/request/{sender}/{token}"
 

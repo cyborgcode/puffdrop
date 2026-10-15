@@ -33,9 +33,9 @@ function roundedRect(cr, x, y, w, h, r) {
 }
 
 const Scope = GObject.registerClass(
-class OmdropScope extends St.DrawingArea {
+class PuffdropScope extends St.DrawingArea {
     _init(radar) {
-        super._init({style_class: 'omdrop-radar-scope', reactive: true, width: 240, height: 240});
+        super._init({style_class: 'puffdrop-radar-scope', reactive: true, width: 240, height: 240});
         this._radar = radar;
     }
 
@@ -54,10 +54,10 @@ export const Radar = GObject.registerClass({
         'peer-clicked': {param_types: [GObject.TYPE_STRING]},
         'mute-toggled': {},
     },
-}, class OmdropRadar extends St.Widget {
+}, class PuffdropRadar extends St.Widget {
     _init(soundDir) {
         super._init({
-            style_class: 'omdrop-radar',
+            style_class: 'puffdrop-radar',
             layout_manager: new Clutter.BinLayout(),
             // A fixed square, centred in its row however wide the menu is.
             x_expand: true,
@@ -80,9 +80,9 @@ export const Radar = GObject.registerClass({
 
         // Quiet by design: a small outline in the corner that stays out of the
         // scope's way and comes forward only under the pointer.
-        this._muteIcon = new St.Icon({icon_name: 'audio-volume-high-symbolic', style_class: 'omdrop-radar-mute-icon'});
+        this._muteIcon = new St.Icon({icon_name: 'audio-volume-high-symbolic', style_class: 'puffdrop-radar-mute-icon'});
         this._muteButton = new St.Button({
-            style_class: 'omdrop-radar-mute',
+            style_class: 'puffdrop-radar-mute',
             child: this._muteIcon,
             can_focus: true,
             x_align: Clutter.ActorAlign.END,
@@ -477,7 +477,7 @@ export const Radar = GObject.registerClass({
             proc = Gio.Subprocess.new(['/bin/sh', '-c',
                 'if command -v pw-play >/dev/null 2>&1; then exec pw-play --volume "$2" "$1"; ' +
                 'elif command -v paplay >/dev/null 2>&1; then exec paplay --volume "$3" "$1"; fi',
-                'omdrop-sound', GLib.build_filenamev([this._soundDir, file]),
+                'puffdrop-sound', GLib.build_filenamev([this._soundDir, file]),
                 String(volume), String(Math.round(volume * 65536))], Gio.SubprocessFlags.NONE);
         } catch {
             return;

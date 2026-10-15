@@ -16,9 +16,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OMDROP = ROOT / "bin" / "omdrop"
+OMDROP = ROOT / "bin" / "puffdrop"
 
-BROADCOM_SAYS = "no Apple Broadcom Wi-Fi"
+BROADCOM_SAYS = "Broadcom"
+UNKNOWN_SAYS = "did not say what it is"
 
 
 def helper(probe):
@@ -43,8 +44,11 @@ class RadioBackendTests(unittest.TestCase):
         # so doctor's only findings are the radio's and the receiver
         # library's; nothing is active, ufw included.
         self.command("systemctl", '#!/bin/sh\ncase "$*" in *is-active*) exit 3 ;; esac\nexit 0\n')
-        self.command("omarchy-launch-floating-terminal-with-presentation",
-                     "#!/bin/sh\nprintf '%s\\n' \"$1\"\n")
+        # The terminal an install opens prints the script it was handed.
+        self.command("xdg-terminal-exec", "#!/bin/sh\nexit 0\n")
+        self.command("systemd-run", '#!/bin/sh\nwhile [ "${1#--}" != "$1" ]; do shift; done\n'
+                     '[ "$1" = xdg-terminal-exec ] && shift\n'
+                     '[ "$1" = bash ] && printf "%s\\n" "$3"\nexit 0\n')
         # A machine with no PCI network hardware at all: not a Mac.
         (tmp / "sys" / "bus" / "pci" / "devices").mkdir(parents=True)
         self.env = os.environ.copy()
@@ -77,7 +81,7 @@ class RadioBackendTests(unittest.TestCase):
 
     def test_a_probing_backend_owns_the_hardware_check(self):
         self.command("omdrop-discoverable", helper({
-            "backend": "owl", "version": "0.1.0", "hardware": True, "contract": "0.7.0",
+            "backend": "acme", "version": "0.1.0", "hardware": True, "contract": "0.7.0",
             "missing": [{"id": "radio", "say": "Wi-Fi is not connected."}]}))
         missing = self.doctor()["missing"]
         self.assertEqual(missing[0], {"id": "radio", "say": "Wi-Fi is not connected."})
@@ -85,45 +89,46 @@ class RadioBackendTests(unittest.TestCase):
 
     def test_a_ready_backend_leaves_only_the_plugins_own_findings(self):
         self.command("omdrop-discoverable", helper({
-            "backend": "owl", "version": "0.1.0", "hardware": True, "contract": "0.7.0",
+            "backend": "acme", "version": "0.1.0", "hardware": True, "contract": "0.7.0",
             "missing": []}))
         ids = {m["id"] for m in self.doctor()["missing"]}
         self.assertTrue(ids <= {"library"}, ids)
 
     def test_hardware_the_backend_cannot_drive_is_reported_alone(self):
         self.command("omdrop-discoverable", helper({
-            "backend": "owl", "version": "0.1.0", "hardware": False,
+            "backend": "acme", "version": "0.1.0", "hardware": False,
             "missing": [{"id": "hardware", "say": "No supported Wi-Fi card."},
                         {"id": "radio", "say": "never shown"}]}))
         self.without_receiver_library()
         self.assertEqual(self.doctor()["missing"],
                          [{"id": "hardware", "say": "No supported Wi-Fi card."}])
 
-    def test_a_helper_without_probe_gets_the_broadcom_checks(self):
+    def test_a_helper_without_probe_is_offered_the_ubuntu_backend(self):
         self.command("omdrop-discoverable", helper(None))
         missing = self.doctor()["missing"]
-        self.assertEqual([m["id"] for m in missing], ["hardware"])
-        self.assertIn(BROADCOM_SAYS, missing[0]["say"])
+        self.assertEqual([m["id"] for m in missing][-1:], ["driver"])
+        self.assertIn(UNKNOWN_SAYS, missing[-1]["say"])
+        self.assertNotIn(BROADCOM_SAYS, json.dumps(missing))
 
     def test_install_with_a_probing_backend_never_builds_the_broadcom_driver(self):
         self.command("omdrop-discoverable", helper({
-            "backend": "owl", "version": "0.1.0", "hardware": True, "missing": []}))
-        self.command("pacman", "#!/bin/sh\nexit 1\n")
+            "backend": "acme", "version": "0.1.0", "hardware": True, "missing": []}))
         self.without_receiver_library()
         result = self.omdrop("install-driver")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("pacman -S --needed --asdeps python-libarchive-c keyutils", result.stdout)
-        for broadcom in ("brcmfmac-awdl-dkms", "makepkg", "omdrop-awdl"):
-            self.assertNotIn(broadcom, result.stdout)
+        self.assertIn("sudo apt-get install -y python3-libarchive-c keyutils", result.stdout)
+        # Another backend is its own package: nothing of omdrop-owl is built.
+        for other in ("brcmfmac-awdl-dkms", "makepkg", "build-deb.sh", "pacman"):
+            self.assertNotIn(other, result.stdout)
 
     def test_install_with_a_probing_backend_and_nothing_missing_does_nothing(self):
         self.command("omdrop-discoverable", helper({
-            "backend": "owl", "version": "0.1.0", "hardware": True, "missing": []}))
+            "backend": "acme", "version": "0.1.0", "hardware": True, "missing": []}))
         result = self.omdrop("install-driver")
-        if "Opening a terminal" in result.stdout:
+        if "Opened a terminal" in result.stdout:
             self.skipTest("this machine lacks the receiver's packages; covered above")
         self.assertIn("Nothing to do", result.stdout)
-        self.assertIn("owl 0.1.0", result.stdout)
+        self.assertIn("acme 0.1.0", result.stdout)
 
 
     def test_a_probe_that_hangs_is_the_backends_problem_not_a_missing_mac(self):
@@ -160,23 +165,23 @@ class RadioBackendTests(unittest.TestCase):
 
     def test_an_answer_without_a_backend_name_is_not_a_probe(self):
         self.command("omdrop-discoverable", helper({"visible": True}))
-        self.assertIn(BROADCOM_SAYS, self.doctor()["missing"][0]["say"])
+        self.assertIn(UNKNOWN_SAYS, self.doctor()["missing"][-1]["say"])
 
     def test_a_backend_below_the_minimum_contract_is_a_blocker_that_names_it(self):
         for contract in ("0.1.0", None):
             with self.subTest(contract=contract):
-                probe = {"backend": "owl", "version": "0.1.0", "hardware": True, "missing": []}
+                probe = {"backend": "acme", "version": "0.1.0", "hardware": True, "missing": []}
                 if contract:
                     probe["contract"] = contract
                 self.command("omdrop-discoverable", helper(probe))
                 first = self.doctor()["missing"][0]
                 self.assertEqual(first["id"], "backend")
-                self.assertIn("owl", first["say"])
+                self.assertIn("acme", first["say"])
                 self.assertIn(contract or "none", first["say"])
 
     def test_a_backend_cannot_claim_the_ids_the_panel_acts_on(self):
         self.command("omdrop-discoverable", helper({
-            "backend": "owl", "version": "0.1.0", "hardware": True, "contract": "0.8.1",
+            "backend": "acme", "version": "0.1.0", "hardware": True, "contract": "0.8.1",
             "missing": [{"id": "driver", "say": "The OWL daemon is missing."},
                         {"id": "radio", "say": "Wi-Fi is not connected."}]}))
         ids = [m["id"] for m in self.doctor()["missing"]]
@@ -185,15 +190,25 @@ class RadioBackendTests(unittest.TestCase):
 
     def test_a_missing_sender_names_the_backend_not_install_driver(self):
         self.command("omdrop-discoverable", helper({
-            "backend": "owl", "version": "0.1.0", "hardware": True, "contract": "0.8.1",
+            "backend": "acme", "version": "0.1.0", "hardware": True, "contract": "0.8.1",
             "missing": []}))
         self.env["OMDROP_SENDER"] = str(self.bin / "nothing-here")
         photo = Path(self.tmp.name) / "photo.jpg"
         photo.write_bytes(b"x")
         result = self.omdrop("send", str(photo))
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("(owl)", result.stderr)
-        self.assertNotIn("Update it with: omdrop install-driver", result.stderr)
+        self.assertIn("(acme)", result.stderr)
+        self.assertNotIn("Update it with: puffdrop install-driver", result.stderr)
+
+    def test_an_omdrop_owl_older_than_the_pin_is_rebuilt(self):
+        self.command("omdrop-discoverable", helper({
+            "backend": "owl", "version": "0.1.0", "hardware": True, "contract": "0.8.1",
+            "missing": []}))
+        missing = self.doctor()["missing"]
+        self.assertIn("driver", [m["id"] for m in missing])
+        result = self.omdrop("install-driver")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("build-deb.sh", result.stdout)
 
 
 if __name__ == "__main__":

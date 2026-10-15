@@ -1,6 +1,6 @@
 # Identity contract
 
-This file is kept byte-identical in `netmojo-systems/omdrop-awdl` and `netmojo-systems/omdrop-plugin`. It defines how every Omdrop program chooses the AirDrop identity it presents, so that the driver's programs (sender, `send-to-peer`, Bluetooth advertiser) and the plugin's (receiver, `omdrop`) always agree. `tests/identity-vectors.json`, also byte-identical in both, holds the cases each implementation must pass.
+This file is kept byte-identical in `netmojo-systems/omdrop-awdl` and `netmojo-systems/omdrop-plugin`. It defines how every Puffdrop program chooses the AirDrop identity it presents, so that the driver's programs (sender, `send-to-peer`, Bluetooth advertiser) and the plugin's (receiver, `puffdrop`) always agree. `tests/identity-vectors.json`, also byte-identical in both, holds the cases each implementation must pass.
 
 ## Identities
 
@@ -35,10 +35,10 @@ A validation record is presented only with the certificate it belongs to: with `
   - The bytes after line 2 total exactly `C + K + R`. Trailing bytes are malformed, as are missing ones.
   - The whole payload is at most 32767 bytes, the kernel's limit for a `user` key.
   - Anything else is malformed.
-- The certificate and key are PEM; the record is DER. Consumers don't parse or verify them; `omdrop` checks them before publishing.
+- The certificate and key are PEM; the record is DER. Consumers don't parse or verify them; `puffdrop` checks them before publishing.
 - "Now" is the wall clock, `time.time()` truncated to whole seconds. A cache whose `hard_expiry` is at or before now is expired and never used.
 
-### Publishing (`omdrop` only)
+### Publishing (`puffdrop` only)
 
 1. Add the key to the publishing process's own keyring (`@p`).
 2. Set its timeout.
@@ -50,7 +50,7 @@ If any step fails, revoke the key, report the failure, and use `self-signed`.
 
 ## Window file
 
-`$XDG_RUNTIME_DIR/omdrop/window`, mode `0600`, `key=value` lines. Written only by `omdrop on`, removed only by `omdrop off`.
+`$XDG_RUNTIME_DIR/omdrop/window`, mode `0600`, `key=value` lines. Written only by `puffdrop on`, removed only by `puffdrop off`.
 
 | Key | Required when | Value |
 |---|---|---|
@@ -119,7 +119,7 @@ Under `flock` on `~/.omdrop/keys/.identity.lock`:
 4. `link()` the key to `key.self-signed.pem`, then the certificate to `certificate.self-signed.pem`. If either link fails because the name exists, remove any link this run made, and use the pair already there.
 5. Remove the temporary directory.
 
-Nothing creates, replaces, or renames `certificate.pem`, `key.pem`, or `validation_record.cms`, except `omdrop identity 1password import`, which deletes them.
+Nothing creates, replaces, or renames `certificate.pem`, `key.pem`, or `validation_record.cms`, except `puffdrop identity 1password import`, which deletes them.
 
 ## An explicit keys directory
 
@@ -127,7 +127,7 @@ Nothing creates, replaces, or renames `certificate.pem`, `key.pem`, or `validati
 
 ## Validation
 
-Consumers check only what selection needs: that files exist, and that a disk key matches its certificate. They don't verify certificate chains, CMS signatures, or account IDs. `omdrop` does that when it imports an identity, adopts one with `use`, fetches one, or opens a window with the disk identity.
+Consumers check only what selection needs: that files exist, and that a disk key matches its certificate. They don't verify certificate chains, CMS signatures, or account IDs. `puffdrop` does that when it imports an identity, adopts one with `use`, fetches one, or opens a window with the disk identity.
 
 ## Running as root
 
@@ -144,7 +144,7 @@ A program running as root only reads, and never creates the self-signed pair.
 
 - By default, no dumps are written.
 - With `OMDROP_DEBUG=1`, a program writes each Discover and Ask request and response to `$XDG_RUNTIME_DIR/omdrop/debug/<name>.plist`, mode `0600`, in a `0700` directory, by renaming a temporary file into place. In each dictionary, at any depth, a value whose key ends in `RecordData` or `Certificate` is replaced by the string `<redacted N bytes>`, where `N` is the value's length in bytes. A body that isn't a property list is written as `<opaque N bytes>` instead.
-- `airdrop-send.py --verbose` and `omdrop send --verbose` set `OMDROP_DEBUG=1`.
+- `airdrop-send.py --verbose` and `puffdrop send --verbose` set `OMDROP_DEBUG=1`.
 - With `OMDROP_DEBUG_SENSITIVE=1`, the same dumps are written without redaction. It implies `OMDROP_DEBUG=1`.
 
 ## Test vectors

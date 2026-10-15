@@ -1,7 +1,7 @@
 """`status` reads the window's mode off two units, so they must exist before
 anything can be seen.
 
-2026-09-18: choosing 10 minutes and turning Omdrop on moved the duration row to
+2026-09-18: choosing 10 minutes and turning Puffdrop on moved the duration row to
 "Until I turn it off" for the length of the radio gate, then back to 10 minutes
 once the timer appeared. Nothing was wrong with the panel: `cmd_on` armed the
 window last, and `cmd_status` infers `forever` from a missing timer.
@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OMDROP = ROOT / "bin" / "omdrop"
+OMDROP = ROOT / "bin" / "puffdrop"
 
 
 class WindowArmingOrderTests(unittest.TestCase):

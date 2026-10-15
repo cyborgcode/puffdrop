@@ -1,5 +1,5 @@
-// Omdrop's panel: a top-bar icon and its menu. A GNOME Shell port of
-// Omdrop's Omarchy panel (Panel.qml). It owns no settings: `omdrop` is the
+// Puffdrop's panel: a top-bar icon and its menu. A GNOME Shell port of
+// Puffdrop's Omarchy panel (Panel.qml). It owns no settings: `puffdrop` is the
 // single source of truth, asked for `status --json` while the menu is open and
 // every ten seconds otherwise, so the icon stays right when a window expires
 // or something else turns receiving off.
@@ -24,6 +24,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
 import {Cli, findCli} from './cli.js';
+import {AnimatedIcon} from './icon.js';
 import {Radar} from './radar.js';
 
 // Discrete stops rather than a free scale: the useful values are few, and the
@@ -44,9 +45,9 @@ const DEFAULT_STOP = 3;
 // it, so a stretch of "on but unseen" is normal for this long, in seconds.
 const SETTLE_SECONDS = 200;
 
-const DBUS_PATH = '/io/github/cyborgcode/Omdrop';
+const DBUS_PATH = '/io/github/cyborgcode/Puffdrop';
 const DBUS_IFACE = `<node>
-  <interface name="io.github.cyborgcode.Omdrop">
+  <interface name="io.github.cyborgcode.Puffdrop">
     <method name="CopyText"><arg type="s" direction="in" name="text"/></method>
     <method name="CopyFile">
       <arg type="s" direction="in" name="path"/>
@@ -57,7 +58,7 @@ const DBUS_IFACE = `<node>
 const CLIPBOARD_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 const CLIPBOARD_MAX_BYTES = 32 * 1024 * 1024;
 
-// A duration as `omdrop window` saves it, to the nearest stop.
+// A duration as `puffdrop window` saves it, to the nearest stop.
 function stopForWindow(window) {
     if (window === 'once')
         return 0;
@@ -91,7 +92,7 @@ function wrappingLabel(styleClass) {
 }
 
 function header(text) {
-    const label = new St.Label({text, style_class: 'omdrop-header', y_align: Clutter.ActorAlign.CENTER, opacity: DIM});
+    const label = new St.Label({text, style_class: 'puffdrop-header', y_align: Clutter.ActorAlign.CENTER, opacity: DIM});
     label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
     return label;
 }
@@ -99,7 +100,7 @@ function header(text) {
 // A menu row that acts when chosen and leaves the menu open, the way the
 // panel's rows did: closing on every press would hide what the press did.
 const ActionItem = GObject.registerClass(
-class OmdropActionItem extends PopupMenu.PopupBaseMenuItem {
+class PuffdropActionItem extends PopupMenu.PopupBaseMenuItem {
     _init(onActivate, params = {}) {
         super._init(params);
         this._onActivate = onActivate;
@@ -116,7 +117,7 @@ class OmdropActionItem extends PopupMenu.PopupBaseMenuItem {
 function holder(styleClass = '') {
     const item = new PopupMenu.PopupBaseMenuItem({
         reactive: true, activate: false, hover: false, can_focus: false,
-        style_class: `omdrop-holder ${styleClass}`,
+        style_class: `puffdrop-holder ${styleClass}`,
     });
     // No hover highlight either: it is not a target.
     item.track_hover = false;
@@ -124,18 +125,24 @@ function holder(styleClass = '') {
 }
 
 const Indicator = GObject.registerClass(
-class OmdropIndicator extends PanelMenu.Button {
+class PuffdropIndicator extends PanelMenu.Button {
     _init(extension) {
-        super._init(0.5, 'Omdrop');
+        super._init(0.5, 'Puffdrop');
         this._extension = extension;
         this._cli = new Cli(findCli(extension.path));
-        this._gicon = Gio.icon_new_for_string(`${extension.path}/icons/omdrop-symbolic.svg`);
-        this._giconCrossed = Gio.icon_new_for_string(`${extension.path}/icons/omdrop-crossed-symbolic.svg`);
+        this._gicon = Gio.icon_new_for_string(`${extension.path}/icons/puffdrop-symbolic.svg`);
+        this._giconCrossed = Gio.icon_new_for_string(`${extension.path}/icons/puffdrop-crossed-symbolic.svg`);
         this._soundDir = GLib.build_filenamev([GLib.path_get_dirname(GLib.path_get_dirname(this._cli.path)), 'share', 'sounds']);
 
-        this._panelIcon = new St.Icon({gicon: this._gicon, style_class: 'system-status-icon omdrop-panel-icon'});
+        this._panelIcon = new St.Icon({gicon: this._gicon, style_class: 'system-status-icon puffdrop-panel-icon'});
         this._panelIcon.set_pivot_point(0.5, 0.5);
-        this.add_child(this._panelIcon);
+        // While on, the animated mark stands in for the still one.
+        this._panelAnim = new AnimatedIcon(16, 'puffdrop-panel-anim');
+        this._panelAnim.visible = false;
+        const panelBox = new St.BoxLayout({y_align: Clutter.ActorAlign.CENTER});
+        panelBox.add_child(this._panelIcon);
+        panelBox.add_child(this._panelAnim);
+        this.add_child(panelBox);
 
         this._state = {
             installed: false, receiving: false, visibility: -1, remaining: -1,
@@ -163,7 +170,7 @@ class OmdropIndicator extends PanelMenu.Button {
         this._scanning = false;
         this._drifting = false;
 
-        this.menu.actor.add_style_class_name('omdrop-menu');
+        this.menu.actor.add_style_class_name('puffdrop-menu');
         this._buildMenu();
         this.menu.connect('open-state-changed', (_m, open) => this._openChanged(open));
         this.menu.actor.connect('key-press-event', (_a, event) => this._onKey(event));
@@ -237,10 +244,10 @@ class OmdropIndicator extends PanelMenu.Button {
         if (this._settling)
             return `Waking the radio${this._dots}`;
         if (!s.receiving)
-            return 'Omdrop off';
+            return 'Puffdrop off';
         if (s.visibility === 0)
             return 'Nobody can see you yet';
-        return 'Omdrop on';
+        return 'Puffdrop on';
     }
 
     get _visibleText() {
@@ -257,9 +264,9 @@ class OmdropIndicator extends PanelMenu.Button {
     get _detailText() {
         const s = this._state;
         if (!s.installed)
-            return `The omdrop command did not answer (${this._cli.path}). Run bin/omdrop setup in the Omdrop checkout.`;
+            return `The puffdrop command did not answer (${this._cli.path}). Run bin/puffdrop setup in the Puffdrop checkout.`;
         if (!this._usable)
-            return s.doctorText !== '' ? s.doctorText : 'Needs the radio backend the Omdrop README describes.';
+            return s.doctorText !== '' ? s.doctorText : 'Needs the radio backend the Puffdrop README describes.';
         if (this._settling)
             return 'The radio takes a few seconds to come up.';
         if (s.lastError !== '')
@@ -304,7 +311,7 @@ class OmdropIndicator extends PanelMenu.Button {
     get _radarStatus() {
         const s = this._state;
         if (!s.receiving)
-            return 'Turning Omdrop on';
+            return 'Turning Puffdrop on';
         if (!this._scanningNow)
             return 'Waiting for the radio';
         if (s.peers.length === 0)
@@ -334,24 +341,27 @@ class OmdropIndicator extends PanelMenu.Button {
         const menu = this.menu;
 
         // The switch, and the state it controls.
-        this._hero = new ActionItem(() => this._toggle(), {style_class: 'omdrop-hero'});
-        this._heroIcon = new St.Icon({gicon: this._gicon, style_class: 'omdrop-hero-icon'});
+        this._hero = new ActionItem(() => this._toggle(), {style_class: 'puffdrop-hero'});
+        this._heroIcon = new St.Icon({gicon: this._gicon, style_class: 'puffdrop-hero-icon'});
         this._heroIcon.set_pivot_point(0.5, 0.5);
         const heroLabels = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        this._stateLabel = new St.Label({style_class: 'omdrop-state'});
-        this._countdownLabel = new St.Label({style_class: 'omdrop-countdown', opacity: DIM});
+        this._stateLabel = new St.Label({style_class: 'puffdrop-state'});
+        this._countdownLabel = new St.Label({style_class: 'puffdrop-countdown', opacity: DIM});
         heroLabels.add_child(this._stateLabel);
         heroLabels.add_child(this._countdownLabel);
         this._switch = new PopupMenu.Switch(false);
         this._switch.y_align = Clutter.ActorAlign.CENTER;
+        this._heroAnim = new AnimatedIcon(32);
+        this._heroAnim.visible = false;
         this._hero.add_child(this._heroIcon);
+        this._hero.add_child(this._heroAnim);
         this._hero.add_child(heroLabels);
         this._hero.add_child(this._switch);
         menu.addMenuItem(this._hero);
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         this._detailItem = holder();
-        this._detail = wrappingLabel('omdrop-detail');
+        this._detail = wrappingLabel('puffdrop-detail');
         this._detailItem.add_child(this._detail);
         menu.addMenuItem(this._detailItem);
 
@@ -359,7 +369,7 @@ class OmdropIndicator extends PanelMenu.Button {
         // rather than installing anything quietly: installing a radio backend
         // is the user's decision, taken at their own sudo prompt.
         this._installItem = holder();
-        this._installButton = new St.Button({label: 'Install the radio backend', style_class: 'button omdrop-install', can_focus: true});
+        this._installButton = new St.Button({label: 'Install the radio backend', style_class: 'button puffdrop-install', can_focus: true});
         this._installButton.connect('clicked', () => this._installDriver());
         this._installItem.add_child(this._installButton);
         menu.addMenuItem(this._installItem);
@@ -376,12 +386,12 @@ class OmdropIndicator extends PanelMenu.Button {
         const windowHead = holder();
         windowHead.add_child(header('STAY VISIBLE FOR'));
         windowHead.add_child(new St.Widget({x_expand: true}));
-        this._windowValue = new St.Label({style_class: 'omdrop-window-value', y_align: Clutter.ActorAlign.CENTER});
+        this._windowValue = new St.Label({style_class: 'puffdrop-window-value', y_align: Clutter.ActorAlign.CENTER});
         windowHead.add_child(this._windowValue);
         menu.addMenuItem(windowHead);
         this._usableItems.push(windowHead);
 
-        const windowRow = new PopupMenu.PopupBaseMenuItem({activate: false, style_class: 'omdrop-slider-row'});
+        const windowRow = new PopupMenu.PopupBaseMenuItem({activate: false, style_class: 'puffdrop-slider-row'});
         this._slider = new Slider(this._state.windowIndex / (WINDOW_STOPS.length - 1));
         this._slider.x_expand = true;
         this._slider.accessible_name = 'Stay visible for';
@@ -403,18 +413,18 @@ class OmdropIndicator extends PanelMenu.Button {
         // Who may send. Shown while off too, so the choice can be made before
         // a window opens. It is saved, and applies to every window.
         usableSeparator();
-        const audienceRow = holder('omdrop-audience');
+        const audienceRow = holder('puffdrop-audience');
         this._tabEveryone = this._audienceTab('system-users-symbolic', 'EVERYONE', 'everyone');
         this._tabContacts = this._audienceTab('avatar-default-symbolic', 'CONTACTS ONLY', 'contacts');
         audienceRow.add_child(this._tabEveryone);
         audienceRow.add_child(this._tabContacts);
         audienceRow.add_child(new St.Widget({x_expand: true}));
-        const sendersBox = new St.BoxLayout({style_class: 'omdrop-senders-button-box'});
-        sendersBox.add_child(new St.Icon({icon_name: 'contact-new-symbolic', style_class: 'omdrop-small-icon'}));
-        this._sendersCount = new St.Label({style_class: 'omdrop-senders-count', y_align: Clutter.ActorAlign.CENTER});
+        const sendersBox = new St.BoxLayout({style_class: 'puffdrop-senders-button-box'});
+        sendersBox.add_child(new St.Icon({icon_name: 'contact-new-symbolic', style_class: 'puffdrop-small-icon'}));
+        this._sendersCount = new St.Label({style_class: 'puffdrop-senders-count', y_align: Clutter.ActorAlign.CENTER});
         sendersBox.add_child(this._sendersCount);
         this._sendersButton = new St.Button({
-            child: sendersBox, style_class: 'omdrop-tab omdrop-senders-button', can_focus: true,
+            child: sendersBox, style_class: 'puffdrop-tab puffdrop-senders-button', can_focus: true,
             accessible_name: 'Known senders, for Contacts Only',
         });
         this._sendersButton.connect('clicked', () => this._toggleSenders());
@@ -431,7 +441,7 @@ class OmdropIndicator extends PanelMenu.Button {
         const senderEntryItem = holder();
         this._senderEntry = new St.Entry({
             hint_text: 'Apple ID email or phone number', can_focus: true, x_expand: true,
-            style_class: 'omdrop-entry',
+            style_class: 'puffdrop-entry',
         });
         this._senderEntry.clutter_text.connect('activate', () => this._addSender(this._senderEntry.get_text()));
         this._senderEntry.clutter_text.connect('text-changed', () => {
@@ -443,7 +453,7 @@ class OmdropIndicator extends PanelMenu.Button {
         senderEntryItem.add_child(this._senderEntry);
         this._sendersSection.addMenuItem(senderEntryItem);
         this._senderNoteItem = holder();
-        this._senderNote = wrappingLabel('omdrop-caption');
+        this._senderNote = wrappingLabel('puffdrop-caption');
         this._senderNoteItem.add_child(this._senderNote);
         this._sendersSection.addMenuItem(this._senderNoteItem);
         menu.addMenuItem(this._sendersSection);
@@ -451,24 +461,24 @@ class OmdropIndicator extends PanelMenu.Button {
         // Sending: a header that opens onto the radar, the devices that can be
         // sent to, and the radar itself.
         usableSeparator();
-        this._peersHead = new ActionItem(() => this._openRadar(), {style_class: 'omdrop-peers-head'});
+        this._peersHead = new ActionItem(() => this._openRadar(), {style_class: 'puffdrop-peers-head'});
         this._peersHead.add_child(header('SEND TO PEERS'));
         this._peersHead.add_child(new St.Widget({x_expand: true}));
-        this._peersCount = new St.Label({style_class: 'omdrop-caption', y_align: Clutter.ActorAlign.CENTER, opacity: DIM});
+        this._peersCount = new St.Label({style_class: 'puffdrop-caption', y_align: Clutter.ActorAlign.CENTER, opacity: DIM});
         this._peersHead.add_child(this._peersCount);
-        this._chevron = new St.Icon({icon_name: 'pan-down-symbolic', style_class: 'omdrop-small-icon'});
+        this._chevron = new St.Icon({icon_name: 'pan-down-symbolic', style_class: 'puffdrop-small-icon'});
         this._chevron.set_pivot_point(0.5, 0.5);
         this._peersHead.add_child(this._chevron);
         menu.addMenuItem(this._peersHead);
         this._usableItems.push(this._peersHead);
 
         this._radarSection = new PopupMenu.PopupMenuSection();
-        this._radarStatusItem = holder('omdrop-radar-status');
+        this._radarStatusItem = holder('puffdrop-radar-status');
         const statusBox = new St.BoxLayout({x_expand: true, x_align: Clutter.ActorAlign.CENTER});
         this._radarStatusWords = new St.Label({opacity: DIM});
         // The words stay still and only the dots move: the dots sit in a label
         // of their own, wide enough for three of them.
-        this._radarStatusDots = new St.Label({style_class: 'omdrop-dots', opacity: DIM});
+        this._radarStatusDots = new St.Label({style_class: 'puffdrop-dots', opacity: DIM});
         statusBox.add_child(this._radarStatusWords);
         statusBox.add_child(this._radarStatusDots);
         this._radarStatusItem.add_child(statusBox);
@@ -477,7 +487,7 @@ class OmdropIndicator extends PanelMenu.Button {
         this._radarSection.addMenuItem(this._peerRowsSection);
         this._peerSeparator = new PopupMenu.PopupSeparatorMenuItem();
         this._radarSection.addMenuItem(this._peerSeparator);
-        const radarItem = holder('omdrop-radar-item');
+        const radarItem = holder('puffdrop-radar-item');
         this._radar = new Radar(this._soundDir);
         this._radar.connect('peer-clicked', (_r, mac) => this._sendTo(mac));
         this._radar.connect('mute-toggled', () => this._toggleSound());
@@ -491,7 +501,7 @@ class OmdropIndicator extends PanelMenu.Button {
         menu.addMenuItem(nameHead);
         this._usableItems.push(nameHead);
         const nameItem = holder();
-        this._nameEntry = new St.Entry({can_focus: true, x_expand: true, style_class: 'omdrop-entry'});
+        this._nameEntry = new St.Entry({can_focus: true, x_expand: true, style_class: 'puffdrop-entry'});
         // An edit is kept when the field loses focus, not only on Enter;
         // Escape abandons it.
         this._nameEntry.clutter_text.connect('activate', () => this._setDeviceName(this._nameEntry.get_text()));
@@ -521,12 +531,12 @@ class OmdropIndicator extends PanelMenu.Button {
         // with a folder that exists.
         const dirItem = holder();
         const dirBox = new St.BoxLayout({x_expand: true});
-        dirBox.add_child(new St.Icon({icon_name: 'folder-open-symbolic', style_class: 'omdrop-small-icon'}));
-        this._dirLabel = new St.Label({x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'omdrop-dir-label'});
+        dirBox.add_child(new St.Icon({icon_name: 'folder-open-symbolic', style_class: 'puffdrop-small-icon'}));
+        this._dirLabel = new St.Label({x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'puffdrop-dir-label'});
         this._dirLabel.clutter_text.ellipsize = Pango.EllipsizeMode.START;
         dirBox.add_child(this._dirLabel);
         this._dirButton = new St.Button({
-            child: dirBox, style_class: 'button omdrop-dir', x_expand: true, can_focus: true,
+            child: dirBox, style_class: 'button puffdrop-dir', x_expand: true, can_focus: true,
             accessible_name: 'Choose another folder',
         });
         this._dirButton.connect('clicked', () => this._pickDownloadDir());
@@ -536,10 +546,10 @@ class OmdropIndicator extends PanelMenu.Button {
     }
 
     _audienceTab(icon, label, mode) {
-        const box = new St.BoxLayout({style_class: 'omdrop-tab-box'});
-        box.add_child(new St.Icon({icon_name: icon, style_class: 'omdrop-small-icon'}));
+        const box = new St.BoxLayout({style_class: 'puffdrop-tab-box'});
+        box.add_child(new St.Icon({icon_name: icon, style_class: 'puffdrop-small-icon'}));
         box.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
-        const button = new St.Button({child: box, style_class: 'omdrop-tab', can_focus: true, accessible_name: label});
+        const button = new St.Button({child: box, style_class: 'puffdrop-tab', can_focus: true, accessible_name: label});
         button.connect('clicked', () => this._setAudience(mode));
         for (const signal of ['notify::hover', 'key-focus-in', 'key-focus-out'])
             button.connect(signal, () => this._render());
@@ -558,6 +568,9 @@ class OmdropIndicator extends PanelMenu.Button {
         this._heroIcon.gicon = usable ? this._gicon : this._giconCrossed;
         this._heroIcon.opacity = lit ? 255 : 140;
         this._setDrifting(s.busy || this._settling);
+        const on = usable && s.receiving && s.visibility === 1 && !s.busy;
+        this._panelAnim.visible = this._heroAnim.visible = on;
+        this._panelIcon.visible = this._heroIcon.visible = !on;
 
         this._stateLabel.text = this._stateText;
         this._countdownLabel.text = this._countdownText;
@@ -575,13 +588,13 @@ class OmdropIndicator extends PanelMenu.Button {
             item.visible = usable;
 
         this._windowValue.text = this._windowValueText;
-        this._windowValue.remove_style_class_name('omdrop-urgent');
-        this._windowValue.remove_style_class_name('omdrop-bold');
+        this._windowValue.remove_style_class_name('puffdrop-urgent');
+        this._windowValue.remove_style_class_name('puffdrop-bold');
         if (this._countingDown) {
-            this._windowValue.add_style_class_name('omdrop-bold');
+            this._windowValue.add_style_class_name('puffdrop-bold');
             // The last minute is when you care whether to press again.
             if (s.remaining <= 60)
-                this._windowValue.add_style_class_name('omdrop-urgent');
+                this._windowValue.add_style_class_name('puffdrop-urgent');
         }
         if (!s.windowPicking)
             this._setSlider(s.windowIndex);
@@ -630,9 +643,9 @@ class OmdropIndicator extends PanelMenu.Button {
     // A fault reads at full strength in red; otherwise the text is secondary.
     _setUrgent(label, urgent, calm = DIM) {
         if (urgent)
-            label.add_style_class_name('omdrop-urgent');
+            label.add_style_class_name('puffdrop-urgent');
         else
-            label.remove_style_class_name('omdrop-urgent');
+            label.remove_style_class_name('puffdrop-urgent');
         label.opacity = urgent ? 255 : calm;
     }
 
@@ -705,7 +718,7 @@ class OmdropIndicator extends PanelMenu.Button {
     }
 
     // The resync notices a window that ended somewhere else: an expiry, or
-    // someone running `omdrop off` in a terminal.
+    // someone running `puffdrop off` in a terminal.
     _armResync() {
         this._stopTimer('resync');
         this._timer('resync', this.menu.isOpen ? 3000 : 10000, () => {
@@ -1041,9 +1054,9 @@ class OmdropIndicator extends PanelMenu.Button {
         }
         this._senderRows.removeAll();
         for (const id of this._state.senderList) {
-            const row = new ActionItem(() => this._editSenders(['remove', id], false), {style_class: 'omdrop-sender-row'});
+            const row = new ActionItem(() => this._editSenders(['remove', id], false), {style_class: 'puffdrop-sender-row'});
             row.add_child(new St.Label({text: id, x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
-            row.add_child(new St.Icon({icon_name: 'window-close-symbolic', style_class: 'omdrop-small-icon', opacity: DIM}));
+            row.add_child(new St.Icon({icon_name: 'window-close-symbolic', style_class: 'puffdrop-small-icon', opacity: DIM}));
             row.accessible_name = `Remove ${id}`;
             this._senderRows.addMenuItem(row);
         }
@@ -1071,7 +1084,7 @@ class OmdropIndicator extends PanelMenu.Button {
             if (clearField)
                 this._senderEntry.set_text('');
         } else {
-            this._state.senderError = result.stderr.trim().replace(/^omdrop: /, '');
+            this._state.senderError = result.stderr.trim().replace(/^puffdrop: /, '');
         }
         this._refreshSenders();
         this._refreshStatus();
@@ -1200,8 +1213,8 @@ class OmdropIndicator extends PanelMenu.Button {
                 // A flash that fades, the first time this device appears.
                 if (!this._flashed.has(mac)) {
                     this._flashed.add(mac);
-                    row.item.add_style_class_name('omdrop-peer-flash');
-                    this._once(`flash-${mac}`, 140, () => row.item.remove_style_class_name('omdrop-peer-flash'));
+                    row.item.add_style_class_name('puffdrop-peer-flash');
+                    this._once(`flash-${mac}`, 140, () => row.item.remove_style_class_name('puffdrop-peer-flash'));
                 }
             }
             this._updatePeerRow(row, mac, name);
@@ -1209,23 +1222,23 @@ class OmdropIndicator extends PanelMenu.Button {
     }
 
     _peerRow(mac) {
-        const item = new ActionItem(() => this._sendTo(mac), {style_class: 'omdrop-peer'});
+        const item = new ActionItem(() => this._sendTo(mac), {style_class: 'puffdrop-peer'});
         const column = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true});
         const top = new St.BoxLayout({x_expand: true});
-        const name = new St.Label({x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'omdrop-peer-name'});
+        const name = new St.Label({x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'puffdrop-peer-name'});
         name.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-        const macLabel = new St.Label({style_class: 'omdrop-caption', y_align: Clutter.ActorAlign.CENTER, opacity: DIM});
+        const macLabel = new St.Label({style_class: 'puffdrop-caption', y_align: Clutter.ActorAlign.CENTER, opacity: DIM});
         top.add_child(name);
         top.add_child(macLabel);
         column.add_child(top);
 
         const statusRow = new St.BoxLayout({x_expand: true});
-        const status = wrappingLabel('omdrop-caption omdrop-peer-status');
+        const status = wrappingLabel('puffdrop-caption puffdrop-peer-status');
         statusRow.add_child(status);
         // Cancels a send under way; dismisses a failure once it is read.
         const cancel = new St.Button({
-            child: new St.Icon({icon_name: 'window-close-symbolic', style_class: 'omdrop-small-icon'}),
-            style_class: 'omdrop-cancel', can_focus: true, y_align: Clutter.ActorAlign.START,
+            child: new St.Icon({icon_name: 'window-close-symbolic', style_class: 'puffdrop-small-icon'}),
+            style_class: 'puffdrop-cancel', can_focus: true, y_align: Clutter.ActorAlign.START,
         });
         cancel.connect('clicked', () => (this._state.sendFailed ? this._dismissSend() : this._cancelSend()));
         statusRow.add_child(cancel);
@@ -1233,9 +1246,9 @@ class OmdropIndicator extends PanelMenu.Button {
 
         // Progress, honestly: the sender reports stages, not bytes, so a
         // sliding segment says "working" and the bar fills when it arrives.
-        const track = new St.Widget({style_class: 'omdrop-track', x_expand: true, clip_to_allocation: true});
-        const segment = new St.Widget({style_class: 'omdrop-track-fill'});
-        const fill = new St.Widget({style_class: 'omdrop-track-fill'});
+        const track = new St.Widget({style_class: 'puffdrop-track', x_expand: true, clip_to_allocation: true});
+        const segment = new St.Widget({style_class: 'puffdrop-track-fill'});
+        const fill = new St.Widget({style_class: 'puffdrop-track-fill'});
         track.add_child(segment);
         track.add_child(fill);
         track.connect('notify::width', () => {
@@ -1251,9 +1264,9 @@ class OmdropIndicator extends PanelMenu.Button {
         const s = this._state;
         const target = s.sendingTo === mac;
         row.name.text = name || mac;
-        row.name.remove_style_class_name('omdrop-bold');
+        row.name.remove_style_class_name('puffdrop-bold');
         if (target)
-            row.name.add_style_class_name('omdrop-bold');
+            row.name.add_style_class_name('puffdrop-bold');
         row.macLabel.text = mac;
         row.macLabel.visible = name !== '';
         row.item.accessible_name = `Send a file to ${name || mac}`;
@@ -1436,7 +1449,7 @@ class OmdropIndicator extends PanelMenu.Button {
         this._render();
     }
 
-    // d turns Omdrop on or off, n opens the radar -- unless a text field
+    // d turns Puffdrop on or off, n opens the radar -- unless a text field
     // has the keyboard, which then gets every key.
     _onKey(event) {
         if (global.stage.get_key_focus() instanceof Clutter.Text)
@@ -1453,7 +1466,7 @@ class OmdropIndicator extends PanelMenu.Button {
         return Clutter.EVENT_PROPAGATE;
     }
 
-    // A right click on the icon turns Omdrop on or off without opening the menu.
+    // A right click on the icon turns Puffdrop on or off without opening the menu.
     vfunc_event(event) {
         if (event.type() === Clutter.EventType.BUTTON_PRESS && event.get_button() === Clutter.BUTTON_SECONDARY) {
             this._toggle();
@@ -1472,7 +1485,7 @@ class OmdropIndicator extends PanelMenu.Button {
     }
 });
 
-export default class OmdropExtension extends Extension {
+export default class PuffdropExtension extends Extension {
     enable() {
         this._indicator = new Indicator(this);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
@@ -1494,7 +1507,7 @@ export default class OmdropExtension extends Extension {
     }
 
     // Images only, from a regular file of a sane size: the caller is the
-    // omdrop command handing over something that just arrived.
+    // puffdrop command handing over something that just arrived.
     CopyFile(path, mimeType) {
         if (!CLIPBOARD_IMAGE_TYPES.includes(mimeType))
             throw new Error(`Not an image type the clipboard takes here: ${mimeType}`);

@@ -52,7 +52,7 @@ identity.not_dumpable()
 # file names and for the receiver name we advertise.
 UNSAFE_CHAR = re.compile(r'[/\\\x00]|[\u202a-\u202e\u2066-\u2069\u200b-\u200f\ufeff]|[\x01-\x1f\x7f-\x9f]')
 # The config file is the source of truth: ~/.config/airdrop/config.toml,
-# written by `omdrop setup` and the configuration commands in `omdrop`.
+# written by `puffdrop setup` and the configuration commands in `puffdrop`.
 # CLI flags override individual keys, so the file can be absent entirely.
 # Validation lives here, never in whatever writes the file: a GUI is a
 # convenience for writing a value, not what makes it safe. Reload = restart.
@@ -223,7 +223,7 @@ GIB = 1024 * MIB
 
 # Metadata, framing, member count, and idle time have fixed ceilings. Transfer
 # bytes use a percentage of free space computed when the upload starts; users
-# configure that percentage with `omdrop limit`.
+# configure that percentage with `puffdrop limit`.
 READ_IDLE_TIMEOUT_SECONDS = 30
 INITIAL_READ_SECONDS = 60
 # How long an accepted Ask waits for its Upload on the same connection. The

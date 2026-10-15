@@ -26,7 +26,7 @@ import libarchive
 
 ROOT = Path(__file__).resolve().parents[1]
 SERVE = ROOT / "bin" / "airdrop-serve.py"
-CLI = ROOT / "bin" / "omdrop"
+CLI = ROOT / "bin" / "puffdrop"
 
 
 def receiver_namespace():

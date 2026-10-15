@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OMDROP = ROOT / "bin" / "omdrop"
+OMDROP = ROOT / "bin" / "puffdrop"
 
 def apple_wifi_sysfs(root):
     """A sysfs tree holding one Broadcom (0x14e4) network controller, which is
@@ -83,7 +83,7 @@ for arg do printf '<%s>\\n' "$arg" >> "$CAPTURE"; done
                 "<proto>",
                 "<tcp>",
                 "<comment>",
-                "<Omdrop AirDrop receiver>",
+                "<Puffdrop AirDrop receiver>",
             ],
         )
 
@@ -104,26 +104,31 @@ for arg do printf '<%s>\\n' "$arg" >> "$CAPTURE"; done
         self.assertEqual(self.captured_args()[4:], [
             "<in>", "<on>", "<awdl0>", "<from>", "<fe80::/10>",
             "<to>", "<fe80::/10>", "<port>", "<8771>", "<proto>", "<tcp>",
-            "<comment>", "<Omdrop AirDrop receiver>",
+            "<comment>", "<Puffdrop AirDrop receiver>",
         ])
 
     def test_dependency_installer_runs_firewall_setup_in_the_same_terminal(self):
         self.command("python3", "#!/bin/sh\nexit 1\n")
+        self.command("xdg-terminal-exec", "#!/bin/sh\nexit 0\n")
         self.command(
-            "omarchy-launch-floating-terminal-with-presentation",
+            "systemd-run",
             """#!/bin/sh
-printf '%s' "$1" > "$CAPTURE"
+while [ "${1#--}" != "$1" ]; do shift; done
+[ "$1" = xdg-terminal-exec ] && shift
+[ "$1" = bash ] && printf '%s' "$3" > "$CAPTURE"
+exit 0
 """,
         )
 
         result = self.run_omdrop("install-driver")
+        self.assertTrue(self.capture.exists(), result.stdout + result.stderr)
 
         self.assertEqual(result.returncode, 0, result.stderr)
         command = self.capture.read_text()
         # Last, so sudo is authenticated by the package work ahead of it
         # rather than prompting a second time.
         self.assertIn("firewall install", command)
-        self.assertLess(command.index("sudo pacman"), command.index("firewall install"))
+        self.assertLess(command.index("sudo apt-get install"), command.index("firewall install"))
 
 
 if __name__ == "__main__":

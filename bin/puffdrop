@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# omdrop -- send and receive files with nearby Apple devices, on Ubuntu.
+# puffdrop -- send and receive files with nearby Apple devices, on Ubuntu.
 #
-# This is the Ubuntu/GNOME port of github.com/netmojo-systems/omdrop-plugin.
-# "omdrop" is this project's name for the feature. The protocol it speaks is
+# Puffdrop is an Ubuntu/GNOME port of Omdrop (github.com/netmojo-systems/omdrop-plugin).
+# "puffdrop" is this project's name for the feature. The protocol it speaks is
 # Apple's, and its wire identifiers are not ours to rename: the mDNS service
 # type really is _airdrop._tcp, the endpoints really are /Discover, /Ask and
 # /Upload, and the receiver's config key really is ReceiverComputerName. So
@@ -16,7 +16,7 @@
 #
 # The panel holds no state of its own. It shells out to this command for every
 # action (toggle, peers --json, send --pick, dir --pick, sound) and reads
-# `omdrop status --json`; everything with an argument lives here.
+# `puffdrop status --json`; everything with an argument lives here.
 #
 # This wraps what already exists rather than inventing state:
 #   receiving on/off   systemctl --user airdrop-receiver.service
@@ -50,14 +50,14 @@ PROJ="$(cd "$(dirname "$SELF")/.." && pwd)"
 # Resolve $0 before looking for the manifest. Invoked through the
 # ~/.local/bin/omdrop symlink that `setup` creates, an unresolved $0 puts the
 # search in ~/.local, which holds no manifest, so the constant was printed
-# instead. That is how `omdrop version` reported 0.4.1 while the installed
+# instead. That is how `puffdrop version` reported 0.4.1 while the installed
 # manifest said 0.4.0 and concealed a stale install.
 #
 # A fallback that silently substitutes for the real value is the same class of
 # defect as a status line reporting a state that was never entered, so this one
 # says when it is guessing, and says when the two disagree.
-VERSION_FALLBACK=0.16.3
-omdrop_version() {
+VERSION_FALLBACK=1.0.0
+puffdrop_version() {
   local dir manifest version= real
   real=$(readlink -f "$0" 2>/dev/null) || real="$0"
   dir=$(cd "$(dirname "$real")/.." 2>/dev/null && pwd) || dir=
@@ -66,13 +66,13 @@ omdrop_version() {
     && version=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest" | head -1)
   if [[ -z "$version" ]]; then
     printf '%s\n' "$VERSION_FALLBACK"
-    printf 'omdrop: could not read a version from %s, so %s is this script only and may not be what is installed.\n' \
+    printf 'puffdrop: could not read a version from %s, so %s is this script only and may not be what is installed.\n' \
       "${manifest:-manifest.json}" "$VERSION_FALLBACK" >&2
     return
   fi
   printf '%s\n' "$version"
   [[ "$version" == "$VERSION_FALLBACK" ]] || \
-    printf 'omdrop: the installed manifest says %s but this script is from %s. The install is mismatched; reinstall the plugin.\n' \
+    printf 'puffdrop: the installed manifest says %s but this script is from %s. The install is mismatched; reinstall the plugin.\n' \
       "$version" "$VERSION_FALLBACK" >&2
 }
 
@@ -144,7 +144,7 @@ identity_py() { python3 "$PROJ/bin/identity.py" "$@"; }
 ID_PY=identity_py
 ID_EXPIRY=omdrop-identity-expiry
 
-# omdrop's own settings live apart from the receiver's config.toml on purpose:
+# puffdrop's own settings live apart from the receiver's config.toml on purpose:
 # airdrop-serve.py validates that file against a fixed key list and refuses to
 # start on anything it does not recognise, so adding our keys there would stop
 # the receiver dead.
@@ -154,7 +154,7 @@ die() { printf '%s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<'EOF'
-omdrop -- send and receive files with nearby Apple devices
+puffdrop -- send and receive files with nearby Apple devices
 
   on [-c|-e] [DURATION]
                     become visible to nearby Apple devices and receive files.
@@ -176,7 +176,7 @@ omdrop -- send and receive files with nearby Apple devices
                     send files to a nearby Apple device, as one transfer
                     it accepts once, or send http/https links. A .webloc or
                     .url file holding a web link goes as that link.
-                    Send links and files separately. With Omdrop off, a
+                    Send links and files separately. With Puffdrop off, a
                     send to NAME turns it on for the usual window first.
                     NAME searches for up to two minutes, reporting devices
                     as they answer; OMDROP_NAME_WAIT sets this in seconds.
@@ -206,7 +206,7 @@ omdrop -- send and receive files with nearby Apple devices
   identity [status|unlock|lock]
                     which identity Apple devices see. With the identity in
                     1Password, `unlock` fetches it now and `lock` turns
-                    Omdrop off and clears the cached copy.
+                    Puffdrop off and clears the cached copy.
   identity 1password import [--vault V] [--title T]
                     move the Apple identity from ~/.omdrop/keys into
                     1Password; the files are deleted only once 1Password
@@ -220,24 +220,24 @@ omdrop -- send and receive files with nearby Apple devices
   doctor [--json]   what is still missing before this can receive
   install-driver    install the radio backend (omdrop-owl, built from a pinned
                     commit) and the receiver's packages, with apt
-  firewall ACTION   install or remove Omdrop's narrow UFW receiver rule
+  firewall ACTION   install or remove Puffdrop's narrow UFW receiver rule
   links ACTION      install or remove the double-click handler for received
                     .url and .webloc links
   open-link FILE    open a .url or .webloc link in the browser (web links only)
   skill ACTION      install or remove the skill that tells AI agents how to
-                    use omdrop (nothing else installs it)
+                    use puffdrop (nothing else installs it)
   version           the plugin version, for bug reports
 
 Aliases, if you reach for a different word:
   start = on      stop = off      list = peers      vis, viz = visibility
 
 Examples:
-  omdrop on 10m
-  omdrop on forever
-  omdrop send ~/photo.jpg
-  omdrop send "Studio Mac" https://ubuntu.com/
-  omdrop name "Rayen's Ubuntu"
-  omdrop limit 30
+  puffdrop on 10m
+  puffdrop on forever
+  puffdrop send ~/photo.jpg
+  puffdrop send "Studio Mac" https://ubuntu.com/
+  puffdrop name "Rayen's Ubuntu"
+  puffdrop limit 30
 EOF
 }
 
@@ -246,7 +246,7 @@ have_unit() {
 }
 
 # First use installs what `setup` would. The panel's switch is the first thing
-# most people press, and telling them to "Run: omdrop setup" named a command
+# most people press, and telling them to "Run: puffdrop setup" named a command
 # that only `setup` itself puts on PATH, so on a fresh install it was not found
 # (issue 12).
 require_unit() {
@@ -330,7 +330,7 @@ cancel_window() {
 #        Human: 5s
 #
 # so a bare integer matched `Original:`, and 5/1000000 truncated to 0 -- which
-# cmd_on reads as the slider's floor and turns into a one-shot window. `omdrop
+# cmd_on reads as the slider's floor and turns into a one-shot window. `puffdrop
 # on 5` therefore answered "until one file arrives" (reported 2026-09-19).
 # Units hid it: `10m` echoes as `10m`, which is not all digits, so it fell
 # through to the right line by luck.
@@ -361,7 +361,7 @@ setting_set() {
 # sees it.
 tildify() { local p=$1; printf '%s\n' "${p/#$HOME/\~}"; }
 
-default_name() { hostname -s 2>/dev/null || echo omdrop; }
+default_name() { hostname -s 2>/dev/null || echo puffdrop; }
 effective_name() { local n; n=$(cfg_get name); [[ -n "$n" ]] && printf '%s\n' "$n" || default_name; }
 effective_dir() { local d; d=$(cfg_get download_dir); [[ -n "$d" ]] && printf '%s\n' "$d" || printf '%s\n' "$HOME/Downloads"; }
 effective_limit() { local n; n=$(cfg_get max_receive_percent); printf '%s\n' "${n:-30}"; }
@@ -438,7 +438,7 @@ PY
 # plugin's bin/omdrop can itself be a symlink into a source checkout, and
 # resolving all the way lands beside the script instead of beside the files
 # that shipped with it. Not $0 alone either: through the ~/.local/bin/omdrop
-# symlink that setup creates, that lands in ~/.local (omdrop issue 12).
+# symlink that setup creates, that lands in ~/.local (puffdrop issue 12).
 plugin_dir() {
   local path="$0" dir hops=0 next
   while (( hops++ < 16 )); do
@@ -503,7 +503,7 @@ prepare_identity() {
   migrate_identity
   case $? in
     0) echo "Copied this computer's AirDrop identity from $LEGACY_IDENTITY_DIR/keys to $IDENTITY_DIR/keys. The original is left in place." ;;
-    2) echo "omdrop could not copy the AirDrop identity from $LEGACY_IDENTITY_DIR/keys to $IDENTITY_DIR/keys." >&2; return 1 ;;
+    2) echo "puffdrop could not copy the AirDrop identity from $LEGACY_IDENTITY_DIR/keys to $IDENTITY_DIR/keys." >&2; return 1 ;;
   esac
   return 0
 }
@@ -527,8 +527,8 @@ ensure_tls() {
 # supervisor cannot inherit the lock and hold it for the life of the window.
 identity_lock() {
   local dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omdrop"
-  (umask 077 && mkdir -p -- "$dir") || die "omdrop could not create $dir"
-  exec 8>"$dir/identity.lock" || die "omdrop could not open its identity lock"
+  (umask 077 && mkdir -p -- "$dir") || die "puffdrop could not create $dir"
+  exec 8>"$dir/identity.lock" || die "puffdrop could not open its identity lock"
   flock 8
 }
 identity_unlock() { exec 8>&-; }
@@ -538,11 +538,11 @@ identity_unlock() { exec 8>&-; }
 identity_notice() {
   local msg=$1
   printf '%s\n' "$msg" >&2
-  desktop_notify "Omdrop" "$msg"
+  desktop_notify "Puffdrop" "$msg"
   return 0
 }
 
-# `omdrop identity`: which identity this computer presents, and 1Password.
+# `puffdrop identity`: which identity this computer presents, and 1Password.
 cmd_identity() {
   local sub=${1:-status}
   case "$sub" in
@@ -561,9 +561,9 @@ cmd_identity() {
         import) shift; driver_identity_ready; "$ID_PY" import "$@" ;;
         use)    shift; driver_identity_ready; "$ID_PY" use "$@" ;;
         off)    "$ID_PY" 1password-off ;;
-        *) die "usage: omdrop identity 1password import [--vault V] [--title T] | use ITEM [--vault V] | off" ;;
+        *) die "usage: puffdrop identity 1password import [--vault V] [--title T] | use ITEM [--vault V] | off" ;;
       esac ;;
-    *) die "usage: omdrop identity [status [--json] | unlock | lock | 1password ...]" ;;
+    *) die "usage: puffdrop identity [status [--json] | unlock | lock | 1password ...]" ;;
   esac
 }
 
@@ -573,7 +573,7 @@ cmd_identity() {
 driver_identity_ready() {
   local installed
   radio_probe \
-    || die "Keeping the identity in 1Password needs the radio backend ($BACKEND_PKG). Install it with: omdrop install-driver"
+    || die "Keeping the identity in 1Password needs the radio backend ($BACKEND_PKG). Install it with: puffdrop install-driver"
   radio_probe_hung && die "$(radio_probe_hung_say)"
   # A backend states which omdrop-awdl helper contract it follows.
   installed=$(probe_field contract)
@@ -597,36 +597,36 @@ unit_install() {
   local plugin=$1 template rendered unit_target installed dropin changed=1
   template="$plugin/share/$UNIT"
   [[ -r "$template" ]] \
-    || die "This copy of omdrop is missing the file that describes the receiving service, so there is nothing to set up. Install the plugin again."
+    || die "This copy of puffdrop is missing the file that describes the receiving service, so there is nothing to set up. Install the plugin again."
   [[ -r "$plugin/bin/airdrop-serve.py" ]] \
-    || die "This copy of omdrop is missing the program that receives files. Install the plugin again."
+    || die "This copy of puffdrop is missing the program that receives files. Install the plugin again."
 
   # Bash substitution rather than sed: an installation path may hold any
   # character a filename may hold, and sed would need it escaped for whichever
   # delimiter we picked.
-  rendered=$(cat "$template") || die "omdrop could not read its own files."
+  rendered=$(cat "$template") || die "puffdrop could not read its own files."
   rendered=${rendered//@PLUGIN_DIR@/$plugin}
   # A unit with the placeholder still in it is a unit that starts nothing, and
   # it would fail at the worst moment -- when someone is standing there trying
   # to send a file. Refuse to write one.
   [[ "$rendered" != *@PLUGIN_DIR@* ]] \
-    || die "omdrop could not work out where it is installed, so the receiving service was left alone."
+    || die "puffdrop could not work out where it is installed, so the receiving service was left alone."
 
   unit_target="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/$UNIT"
   mkdir -p "$(dirname "$unit_target")" \
-    || die "omdrop could not create the folder systemd keeps your own services in."
+    || die "puffdrop could not create the folder systemd keeps your own services in."
   installed=
   [[ -r "$unit_target" ]] && installed=$(cat "$unit_target")
   if [[ "$rendered" != "$installed" ]]; then
     printf '%s\n' "$rendered" > "$unit_target" \
-      || die "omdrop could not write the receiving service."
+      || die "puffdrop could not write the receiving service."
     changed=0
   fi
-  # `omdrop dir` drop-ins written before 0.9.1 name the old identity folder.
+  # `puffdrop dir` drop-ins written before 0.9.1 name the old identity folder.
   dropin="$unit_target.d/10-download-dir.conf"
   if [[ -f "$dropin" ]] && grep -qx 'ReadWritePaths=%h/.opendrop' "$dropin"; then
     sed -i 's|^ReadWritePaths=%h/\.opendrop$|ReadWritePaths=%h/.omdrop|' "$dropin" \
-      || die "omdrop could not update $dropin."
+      || die "puffdrop could not update $dropin."
     changed=0
   fi
   if (( changed == 0 )); then
@@ -644,7 +644,7 @@ unit_install() {
 # switching it off in Extensions is the user's choice and setup leaves it be.
 # GNOME Shell on Wayland finds an extension it did not start with only at the
 # next login. Returns 0 when it changed something.
-EXT_UUID=omdrop@cyborgcode.github.io
+EXT_UUID=puffdrop@cyborgcode.github.io
 extension_install() {
   local plugin=$1 link raw
   [[ -r "$plugin/extension/metadata.json" ]] || return 1
@@ -657,14 +657,14 @@ extension_install() {
       return 1
     fi
   elif [[ -e "$link" ]]; then
-    echo "Left $link alone: it is not a link omdrop made." >&2
+    echo "Left $link alone: it is not a link puffdrop made." >&2
     return 1
   fi
   if ! { mkdir -p "$(dirname "$link")" && ln -sfn "$plugin/extension" "$link"; }; then
-    echo "omdrop could not link its GNOME Shell extension at $link." >&2
+    echo "puffdrop could not link its GNOME Shell extension at $link." >&2
     return 1
   fi
-  echo "Installed the Omdrop panel, a GNOME Shell extension."
+  echo "Installed the Puffdrop panel, a GNOME Shell extension."
   if extension_enable "$EXT_UUID"; then
     echo "Enabled it; its icon is in the top bar."
   else
@@ -684,32 +684,32 @@ extension_enable() {
 
 # Everything `setup` installs, each step idempotent. Returns 0 when it changed
 # something, 1 when everything was already in place. Shared with require_unit,
-# so the first `omdrop on` sets up a fresh install without being asked.
+# so the first `puffdrop on` sets up a fresh install without being asked.
 setup_install() {
   local plugin did=0
 
   plugin=$(plugin_dir) \
-    || die "omdrop cannot tell where it is installed, so it did not change anything."
+    || die "puffdrop cannot tell where it is installed, so it did not change anything."
   if unit_install "$plugin"; then
     did=1
     echo "Set up the service that receives files."
   fi
 
-  # Put `omdrop` on the user's PATH. ~/.local/bin is on PATH on Ubuntu once
+  # Put `puffdrop` on the user's PATH. ~/.local/bin is on PATH on Ubuntu once
   # it exists (~/.profile adds it at login).
   #
   # A symlink rather than a copy, so an update to the checkout updates the
   # command too. Only ever replaced when it points at another checkout's
-  # bin/omdrop or is dangling: a user who put their own omdrop there
+  # bin/omdrop or is dangling: a user who put their own puffdrop there
   # outranks us.
   local bindir="${XDG_BIN_HOME:-$HOME/.local/bin}" link current=''
-  link="$bindir/omdrop"
+  link="$bindir/puffdrop"
   [[ -e "$link" || -L "$link" ]] && current=$(readlink -f "$link" 2>/dev/null)
-  if [[ -z "$current" || "$current" == */bin/omdrop || ( -L "$link" && ! -e "$link" ) ]]; then
-    if mkdir -p "$bindir" && ln -sfn "$plugin/bin/omdrop" "$link"; then
-      [[ "$current" == "$plugin/bin/omdrop" ]] || { did=1; echo "Put the omdrop command on your PATH at $link."; }
+  if [[ -z "$current" || "$current" == */bin/puffdrop || ( -L "$link" && ! -e "$link" ) ]]; then
+    if mkdir -p "$bindir" && ln -sfn "$plugin/bin/puffdrop" "$link"; then
+      [[ "$current" == "$plugin/bin/puffdrop" ]] || { did=1; echo "Put the puffdrop command on your PATH at $link."; }
     else
-      echo "omdrop could not create $link, so the omdrop command is not on your PATH. Create it by hand: ln -s $plugin/bin/omdrop $link" >&2
+      echo "puffdrop could not create $link, so the puffdrop command is not on your PATH. Create it by hand: ln -s $plugin/bin/puffdrop $link" >&2
     fi
   else
     echo "Left $link alone: it is not ours and points at $current." >&2
@@ -724,9 +724,9 @@ setup_install() {
 
   if [[ -z "$(cfg_get name)" ]]; then
     cfg_set name "$(default_name)" \
-      || die "omdrop could not save the name Apple devices will see."
+      || die "puffdrop could not save the name Apple devices will see."
     did=1
-    printf 'Apple devices will see this computer as "%s". Change it with: omdrop name\n' "$(effective_name)"
+    printf 'Apple devices will see this computer as "%s". Change it with: puffdrop name\n' "$(effective_name)"
   fi
 
   # A failed copy must not be followed by a fresh certificate: that would
@@ -736,7 +736,7 @@ setup_install() {
   migrate_identity; migrated=$?
   case $migrated in
     0) did=1; echo "Copied this computer's AirDrop identity from $LEGACY_IDENTITY_DIR/keys to $IDENTITY_DIR/keys. The original is left in place." ;;
-    2) echo "omdrop could not copy the AirDrop identity from $LEGACY_IDENTITY_DIR/keys to $IDENTITY_DIR/keys." >&2 ;;
+    2) echo "puffdrop could not copy the AirDrop identity from $LEGACY_IDENTITY_DIR/keys to $IDENTITY_DIR/keys." >&2 ;;
   esac
   if (( migrated != 2 )); then
     ensure_tls
@@ -750,7 +750,7 @@ setup_install() {
 }
 
 cmd_setup() {
-  setup_install || echo "Everything omdrop sets up for you was already in place."
+  setup_install || echo "Everything puffdrop sets up for you was already in place."
 
   local missing=()
   readarray -t missing < <(prereqs_missing)
@@ -759,7 +759,7 @@ cmd_setup() {
     printf '\nNot ready to receive yet:\n'
     printf -- '  - %s\n' "${missing[@]}"
   else
-    printf '\nReady. Turn receiving on from the top bar, or run: omdrop on\n'
+    printf '\nReady. Turn receiving on from the top bar, or run: puffdrop on\n'
   fi
   skills_offer
 }
@@ -775,7 +775,7 @@ cmd_setup() {
 # Each line is "id<TAB>sentence": the id is for the panel, which offers to fix
 # the one thing it can, and the sentence is for the person reading it.
 # The radio half is a separate package. On Ubuntu that is omdrop-owl, which
-# `omdrop install-driver` builds from a pinned commit. A backend describes
+# `puffdrop install-driver` builds from a pinned commit. A backend describes
 # itself through `omdrop-discoverable probe --json`, run unprivileged
 # (docs/radio-backend.md), and owns the hardware and installation checks for
 # its own radio. A helper that does not answer the probe -- omdrop-awdl, the
@@ -886,7 +886,7 @@ backend_contract_ok() {
 backend_contract_say() {
   local contract
   contract=$(probe_field contract)
-  printf '%s' "The installed radio backend ($(probe_field backend)) follows helper contract ${contract:-none}, older than the $BACKEND_CONTRACT_MIN this version of Omdrop needs. Update its package."
+  printf '%s' "The installed radio backend ($(probe_field backend)) follows helper contract ${contract:-none}, older than the $BACKEND_CONTRACT_MIN this version of Puffdrop needs. Update its package."
 }
 
 # For messages that ask for a newer or missing radio helper: what provides
@@ -901,9 +901,9 @@ radio_update() {
   if radio_probe && [[ "$(probe_field backend)" != owl ]]; then
     local backend
     backend=$(probe_field backend)
-    echo "Update the package that provides it${backend:+ ($backend)}: omdrop install-driver leaves it alone."
+    echo "Update the package that provides it${backend:+ ($backend)}: puffdrop install-driver leaves it alone."
   else
-    echo "Update it with: omdrop install-driver"
+    echo "Update it with: puffdrop install-driver"
   fi
 }
 
@@ -926,8 +926,8 @@ prereqs_missing() {
     receiver_libs_installed \
       || printf 'library\t%s\n' "Packages the receiver needs ($RECEIVER_PKGS) are not installed. The button below installs them."
     backend_current \
-      || printf 'driver\t%s\n' "The installed $BACKEND_PKG ($(probe_field version)) is older than the $BACKEND_VERSION this version of Omdrop needs. The button below updates it."
-    have_unit || printf 'service\t%s\n' "The service that receives files is not installed yet. Turning Omdrop on installs it."
+      || printf 'driver\t%s\n' "The installed $BACKEND_PKG ($(probe_field version)) is older than the $BACKEND_VERSION this version of Puffdrop needs. The button below updates it."
+    have_unit || printf 'service\t%s\n' "The service that receives files is not installed yet. Turning Puffdrop on installs it."
     return 0
   fi
   receiver_libs_installed \
@@ -935,9 +935,9 @@ prereqs_missing() {
   if [[ ! -x "$DISCOVERABLE" ]]; then
     printf 'driver\t%s\n' "The radio backend that makes this computer visible to Apple devices ($BACKEND_PKG) is not installed. Installing it needs your password."
   else
-    printf 'driver\t%s\n' "The radio helper at $DISCOVERABLE did not say what it is, so it is not one Omdrop can drive on Ubuntu. The button below installs $BACKEND_PKG."
+    printf 'driver\t%s\n' "The radio helper at $DISCOVERABLE did not say what it is, so it is not one Puffdrop can drive on Ubuntu. The button below installs $BACKEND_PKG."
   fi
-  have_unit || printf 'service\t%s\n' "The service that receives files is not installed yet. Turning Omdrop on installs it."
+  have_unit || printf 'service\t%s\n' "The service that receives files is not installed yet. Turning Puffdrop on installs it."
 }
 
 # `doctor` is the panel's version of the same answer. --json so the widget can
@@ -961,27 +961,27 @@ print(json.dumps({"ready": not rows,
     printf 'Ready to receive.\n'
   fi
   # Which identity Apple devices will see, and anything left behind. Reported,
-  # never repaired here: `omdrop off` is the one thing that clears a window.
+  # never repaired here: `puffdrop off` is the one thing that clears a window.
   printf '\n'
   "$ID_PY" status 2>/dev/null || printf 'The identity could not be read.\n'
   if [[ -e "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omdrop/window" ]] && ! receiving; then
-    printf 'A window'"'"'s identity file remains although nothing is receiving. Clear it with: omdrop off\n'
+    printf 'A window'"'"'s identity file remains although nothing is receiving. Clear it with: puffdrop off\n'
   fi
 }
 
 # AirDrop data reaches the ordinary user receiver through one kernel socket.
 # UFW's default-drop policy sees that TCP traffic after the AWDL data path has
 # done its job, so a healthy radio can advertise while every sender's SYN is
-# discarded. This is the only firewall exception Omdrop needs: IPv6 link-local
+# discarded. This is the only firewall exception Puffdrop needs: IPv6 link-local
 # peers, to our IPv6 link-local address, on awdl0, TCP 8771.
 #
 # The DKMS package deliberately does not own this rule. It supplies a radio
 # that other AWDL applications can use; opening an application port belongs to
 # the application. `install-driver` calls this command in the same visible
 # terminal after its package work, which normally reuses the same sudo
-# authentication without putting Omdrop policy in the driver package.
+# authentication without putting Puffdrop policy in the driver package.
 UFW_RULE=(allow in on awdl0 from fe80::/10 to fe80::/10 port 8771 proto tcp
-          comment "Omdrop AirDrop receiver")
+          comment "Puffdrop AirDrop receiver")
 
 ufw_active() {
   command -v ufw >/dev/null 2>&1 \
@@ -997,7 +997,7 @@ cmd_firewall() {
         return 0
       fi
       if ! systemctl is-active --quiet ufw.service; then
-        echo "UFW is not active; Omdrop did not change its configuration."
+        echo "UFW is not active; Puffdrop did not change its configuration."
         return 0
       fi
       echo "Allowing AirDrop receiver traffic only on awdl0, from IPv6 link-local peers, to TCP 8771."
@@ -1005,13 +1005,13 @@ cmd_firewall() {
       ;;
     remove)
       if ! command -v ufw >/dev/null 2>&1; then
-        echo "UFW is not installed; there is no Omdrop UFW rule to remove."
+        echo "UFW is not installed; there is no Puffdrop UFW rule to remove."
         return 0
       fi
       sudo ufw --force delete "${UFW_RULE[@]}"
       ;;
     *)
-      die "usage: omdrop firewall install|remove"
+      die "usage: puffdrop firewall install|remove"
       ;;
   esac
 }
@@ -1052,7 +1052,7 @@ sudo apt-get install -y ${pkgs[*]}"
   # something as root should still have the source they built, and a later
   # version is then a fetch rather than a fresh clone. Re-running updates it.
   if (( backend_needed )); then
-    local src="${XDG_CACHE_HOME:-$HOME/.cache}/omdrop/$BACKEND_PKG" src_q
+    local src="${XDG_CACHE_HOME:-$HOME/.cache}/puffdrop/$BACKEND_PKG" src_q
     printf -v src_q '%q' "$src"
     build="$build
 mkdir -p \"\$(dirname $src_q)\"
@@ -1078,7 +1078,7 @@ $self_q firewall install"
     fi
     return 0
   fi
-  run_install "$build" "Omdrop needs a radio backend and a few packages for its receiver. Installing them needs administrative privilege, so you will be asked for your password."
+  run_install "$build" "Puffdrop needs a radio backend and a few packages for its receiver. Installing them needs administrative privilege, so you will be asked for your password."
 }
 
 # Run an install script the person watches. In a terminal, right there, with
@@ -1097,7 +1097,7 @@ run_install() {
   local script="echo $intro_q; echo; ( $build
 ); rc=\$?; echo; if [ \$rc -eq 0 ]; then echo 'Done.'; else echo \"Installing failed (exit \$rc). The messages above say why.\"; fi; read -rsn 1 -p 'Press any key to close...' </dev/tty; echo"
   if terminal_run bash -c "$script"; then
-    echo "Opened a terminal to install what Omdrop needs."
+    echo "Opened a terminal to install what Puffdrop needs."
   else
     echo "$intro"
     echo
@@ -1133,11 +1133,11 @@ cmd_on() {
       -c|--contacts) want_vis=contacts; shift ;;
       -e|--everyone) want_vis=everyone; shift ;;
       --)            shift; break ;;
-      -*)            die "omdrop on: unknown option $1. Use -c/--contacts or -e/--everyone." ;;
+      -*)            die "puffdrop on: unknown option $1. Use -c/--contacts or -e/--everyone." ;;
       *)             break ;;
     esac
   done
-  (( $# <= 1 )) || die "omdrop on: one duration at a time, not \"$*\""
+  (( $# <= 1 )) || die "puffdrop on: one duration at a time, not \"$*\""
 
   # Before anything is armed, so a rejected duration cannot leave the mode
   # changed and the window closed.
@@ -1150,7 +1150,7 @@ cmd_on() {
       # visible with no window when a window is exactly what was asked for.
       [[ "$dur" =~ ^[0-9]+(s|sec|m|min|h|hour|d|day)?$ ]] \
         || die "duration $dur: a systemd time span such as 10m or 1h, or \"once\" or \"forever\""
-      # A bare number means MINUTES. systemd reads it as seconds, so `omdrop on
+      # A bare number means MINUTES. systemd reads it as seconds, so `puffdrop on
       # 3` opened a three-second window that was over before the user read the
       # line saying it had opened. Minutes is what every example in the help
       # uses and what anyone typing a bare number means.
@@ -1165,7 +1165,7 @@ cmd_on() {
   # Only now that the duration is known good.
   if [[ -n "$want_vis" ]]; then
     cmd_visibility "$want_vis" >/dev/null \
-      || die "omdrop on: could not switch to $want_vis, so nothing was turned on."
+      || die "puffdrop on: could not switch to $want_vis, so nothing was turned on."
   fi
 
   # The identity is settled before anything starts, so a cancelled start has
@@ -1189,7 +1189,7 @@ cmd_on() {
   id_out=$("$ID_PY" window --seq "$id_seq") || id_rc=$?
   if (( id_rc == 3 )); then
     identity_unlock
-    echo "Omdrop was turned off while it was starting." >&2
+    echo "Puffdrop was turned off while it was starting." >&2
     return 0
   fi
   (( id_rc == 0 )) || die "The AirDrop receiver would not start: its identity could not be settled."
@@ -1289,10 +1289,10 @@ cmd_on() {
   # feature that never works again.
   #
   # The unit and the identity are brought up to date first, so a plugin update
-  # needs no separate `omdrop setup` before the receiver runs again.
+  # needs no separate `puffdrop setup` before the receiver runs again.
   start_receiver() {
     local plugin
-    plugin=$(plugin_dir) || { echo "omdrop cannot tell where it is installed." >&2; return 1; }
+    plugin=$(plugin_dir) || { echo "puffdrop cannot tell where it is installed." >&2; return 1; }
     unit_install "$plugin" || true
     prepare_identity >&2 || return 1
     ensure_tls; (( $? == 2 )) && return 1
@@ -1346,8 +1346,8 @@ cmd_on() {
   cmd_status
 }
 
-# Sends in progress, one marker per `omdrop send` process, naming where it
-# is going. Turning Omdrop off takes the radio down, and a transfer cut off
+# Sends in progress, one marker per `puffdrop send` process, naming where it
+# is going. Turning Puffdrop off takes the radio down, and a transfer cut off
 # that way never closes on the other end: a Mac kept a 0-byte file "in use"
 # and stopped accepting connections from this machine (2026-10-09).
 SENDS_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omdrop/sends"
@@ -1381,7 +1381,7 @@ cmd_off() {
   # The timers that close a window pass --force: nobody is there to ask.
   if (( ! force )); then
     to=$(sending_to | head -1)
-    [[ -z "$to" ]] || die "Still sending to $to. Turning Omdrop off now would cut the transfer off. Cancel the send first, or turn it off anyway with: omdrop off --force"
+    [[ -z "$to" ]] || die "Still sending to $to. Turning Puffdrop off now would cut the transfer off. Cancel the send first, or turn it off anyway with: puffdrop off --force"
   fi
   # Under the identity lock, in this order: nothing that starts later can
   # publish into this window; the receiver stops before the identity it loaded
@@ -1521,11 +1521,11 @@ require_sender() {
   [[ -x "$SENDER" ]] \
     || die "The program that sends files is not installed. It comes with the $(radio_pkg). $(radio_update)"
   awdl_link_local \
-    || die "The Apple-compatible radio is not running, so nobody can be heard and nothing can be sent. Start it with: omdrop on 10m"
+    || die "The Apple-compatible radio is not running, so nobody can be heard and nothing can be sent. Start it with: puffdrop on 10m"
 }
 
 # Whether a window is open: awdl0 has its link-local address and the radio
-# helper reports itself visible. The address alone outlives `omdrop off`. The
+# helper reports itself visible. The address alone outlives `puffdrop off`. The
 # helper's answer is read as JSON, so any valid spelling of it counts.
 radio_on() {
   awdl_link_local || return 1
@@ -1579,7 +1579,7 @@ narrate_send() {
 #
 # Chosen here rather than left to the sender for two reasons. The sender's
 # name for this is `--mac`, so its refusals ("several peers heard; choose one
-# with --mac") name an option `omdrop send` does not have and send the reader
+# with --mac") name an option `puffdrop send` does not have and send the reader
 # in a circle. And an AWDL address is randomised per session -- nobody is
 # going to read all six bytes off one listing and type them back -- so any
 # unambiguous part of one is accepted here.
@@ -1700,7 +1700,7 @@ choose_peer() {
     | sed -nE 's/^(([0-9a-f]{2}:){5}[0-9a-f]{2})[[:space:]]+(-?[0-9]+|\?) dBm[[:space:]]+[^[:space:]]+[[:space:]]*(.*)$/\1|\3|\4/p')
   if (( ${#rows[@]} == 0 )); then
     (( by_name )) && die "No Apple device was heard in $NAME_WAIT seconds. Open AirDrop on \"$shown\" so it can be heard, then try again."
-    die "No nearby Apple device found. A window is what finds them, so open one first:  omdrop on 10m"
+    die "No nearby Apple device found. A window is what finds them, so open one first:  puffdrop on 10m"
   fi
 
   for row in "${rows[@]}"; do
@@ -1722,7 +1722,7 @@ choose_peer() {
 only while it is ready to receive, so open AirDrop on it and try again. What answered:
 $(printf '%s\n' "$listing" | sed 's/^/  /')"
     fi
-    die "No device matching \"$want\" was found. See what is nearby:  omdrop peers"
+    die "No device matching \"$want\" was found. See what is nearby:  puffdrop peers"
   fi
   if (( ${#matches[@]} > 1 )); then
     # Each line is the command to run, not a description of one: the files are
@@ -1732,7 +1732,7 @@ $(printf '%s\n' "$listing" | sed 's/^/  /')"
     for row in "${matches[@]}"; do
       local m=${row%%|*} r=${row#*|}; local rssi=${r%%|*} nm=${r#*|}
       lines+="
-  omdrop send --to $m$quoted   (${rssi} dBm${nm:+, $nm})"
+  puffdrop send --to $m$quoted   (${rssi} dBm${nm:+, $nm})"
     done
     die "${want:+Several devices match \"$want\"}${want:-Several Apple devices were found}. Choose one:$lines"
   fi
@@ -1745,7 +1745,7 @@ cmd_send() {
   local to= wait=$DEFAULT_SEND_WAIT verbose=0 pick=0 rc f url; local -a rest=() files=() urls=()
   while (( $# )); do
     case "$1" in
-      --to)     shift; (( $# )) || die "send --to: the address of a device, as listed by: omdrop peers"; to=$1 ;;
+      --to)     shift; (( $# )) || die "send --to: the address of a device, as listed by: puffdrop peers"; to=$1 ;;
       --to=*)   to=${1#--to=} ;;
       --wait)   shift; (( $# )) || die "send --wait: a number of seconds"; wait=$1 ;;
       --wait=*) wait=${1#--wait=} ;;
@@ -1760,7 +1760,7 @@ cmd_send() {
       -*)       die "send: no such option $1" ;;
       # Collected first, sorted afterwards: which positional is a file and
       # which is the recipient is decided by the filesystem, not by position,
-      # so `omdrop send fred photo.jpg` and `omdrop send photo.jpg fred` both
+      # so `puffdrop send fred photo.jpg` and `puffdrop send photo.jpg fred` both
       # work. Someone reaching for this should not have to recall an order.
       *)        rest+=("$1") ;;
     esac
@@ -1788,7 +1788,7 @@ cmd_send() {
     # NUL-separated, because a filename may hold a newline. Through a file
     # rather than $(...), which cannot carry a NUL, so the chooser's exit
     # status still decides.
-    local chosen; chosen=$(mktemp) || die "omdrop could not create a temporary file."
+    local chosen; chosen=$(mktemp) || die "puffdrop could not create a temporary file."
     pick files "$(send_start_dir)" "Send to ${to:-a nearby device}" > "$chosen"
     rc=$?
     mapfile -d '' -t files < "$chosen"
@@ -1819,8 +1819,8 @@ cmd_send() {
     || die "Send links and files separately: one transfer carries one or the other."
   (( ${#link_notes[@]} == 0 )) || printf '%s\n' "${link_notes[@]}"
 
-  (( ${#files[@]} + ${#urls[@]} )) || die "usage: omdrop send [RECIPIENT] FILE...|URL... [--wait SECONDS]
-  RECIPIENT is a device name, as shown by \`omdrop peers -n\`, or part of an address.
+  (( ${#files[@]} + ${#urls[@]} )) || die "usage: puffdrop send [RECIPIENT] FILE...|URL... [--wait SECONDS]
+  RECIPIENT is a device name, as shown by \`puffdrop peers -n\`, or part of an address.
   A URL is an http or https link, which opens in the recipient's browser."
   local -a names=()
   local n
@@ -1870,13 +1870,13 @@ cmd_send() {
   # device heard" is whichever device spoke first.
   if ! radio_on; then
     local example; printf -v example ' %q' "${urls[@]}" "${files[@]}"
-    [[ -n "$to" ]] || die "Omdrop is off, so no device can be heard. Name the device, and omdrop turns itself on to find it:
-  omdrop send NAME$example
-Or turn it on first, with: omdrop on"
-    printf 'Omdrop is off. Turning it on for %s, so nearby devices can be heard...\n' "$(default_window)"
-    "$SELF" on >/dev/null || die "Omdrop could not be turned on, so nothing was sent."
-    radio_on || die "Omdrop turned on, but the radio is not up yet, so nothing was sent. Try again in a few seconds."
-    printf 'Omdrop is on, and visible nearby until the window ends. Turn it off sooner with: omdrop off\n'
+    [[ -n "$to" ]] || die "Puffdrop is off, so no device can be heard. Name the device, and puffdrop turns itself on to find it:
+  puffdrop send NAME$example
+Or turn it on first, with: puffdrop on"
+    printf 'Puffdrop is off. Turning it on for %s, so nearby devices can be heard...\n' "$(default_window)"
+    "$SELF" on >/dev/null || die "Puffdrop could not be turned on, so nothing was sent."
+    radio_on || die "Puffdrop turned on, but the radio is not up yet, so nothing was sent. Try again in a few seconds."
+    printf 'Puffdrop is on, and visible nearby until the window ends. Turn it off sooner with: puffdrop off\n'
   fi
 
   choose_peer "$to" "${urls[@]}" "${files[@]}"
@@ -1888,7 +1888,7 @@ Or turn it on first, with: omdrop on"
   for url in "${urls[@]}"; do link_args+=(--url "$url"); done
   local cmd=("$SENDER" --name "$(effective_name)" --wait "$wait" --mac "$PEER" "${link_args[@]}" -- "${files[@]}")
 
-  # Until this process exits, `omdrop off` knows a transfer is running.
+  # Until this process exits, `puffdrop off` knows a transfer is running.
   mark_sending "${to:-$PEER}" || true
   trap unmark_sending EXIT
 
@@ -2037,7 +2037,7 @@ spinner_while() {
 
 cmd_peers() {
   # -n is opt-in because asking a peer its name means connecting to it, which
-  # shows this machine to every device listed. A bare `omdrop peers` stays
+  # shows this machine to every device listed. A bare `puffdrop peers` stays
   # passive: it reads the firmware peer table and transmits nothing.
   #
   # -n also raises a BLE advert carrying this account's contact hashes for the
@@ -2052,11 +2052,11 @@ cmd_peers() {
       --no-wake) wake=(--no-wake); shift ;;
       --json) json=1; shift ;;
       --stream) stream=1; shift ;;
-      *) die "usage: omdrop peers [-n|--names] [--no-wake] [--json] [--stream]" ;;
+      *) die "usage: puffdrop peers [-n|--names] [--no-wake] [--json] [--stream]" ;;
     esac
   done
   (( ! stream )) || { (( json )) && (( ${#names[@]} )); } \
-    || die "omdrop peers: --stream is for the panel and needs --json -n"
+    || die "puffdrop peers: --stream is for the panel and needs --json -n"
   require_sender
   # The driver package owns the sender, and the two are versioned independently, so
   # a plugin newer than the installed driver would otherwise hand a flag to a
@@ -2121,7 +2121,7 @@ cmd_peers() {
     # The RADIO, not the receiver: the receiver can be up with no window open,
     # and it is the window that runs the peer watcher which fills this table.
     if [[ "$("$DISCOVERABLE" status --json 2>/dev/null)" != *'"visible":true'* ]]; then
-      die "Omdrop is currently OFF. Turn it on to see peers."
+      die "Puffdrop is currently OFF. Turn it on to see peers."
     fi
     # A window IS open, so the sender's advice to open one is stale. Say the
     # one thing that is true: nobody is there yet. Peers appear as they
@@ -2180,7 +2180,7 @@ cmd_watch() {
     esac
   done
   local dir; dir=$(effective_dir)
-  echo "omdrop watch: following $UNIT, saving into $dir"
+  echo "puffdrop watch: following $UNIT, saving into $dir"
   journalctl --user -u "$UNIT" -f -n 0 -o cat 2>/dev/null | while IFS= read -r line; do
     local files=()
     case "$line" in
@@ -2198,10 +2198,10 @@ cmd_watch() {
       [[ -n "$f" ]] || continue
       [[ "$f" == /* ]] || f="$dir/$f"
       if [[ ! -e "$f" ]]; then
-        echo "omdrop watch: receiver named '$f' but it is not there" >&2
+        echo "puffdrop watch: receiver named '$f' but it is not there" >&2
         continue
       fi
-      echo "omdrop watch: announcing $f"
+      echo "puffdrop watch: announcing $f"
       "$SELF" handle "$f" &
     done
     if (( once )) && (( ${#files[@]} )); then
@@ -2254,7 +2254,7 @@ if isinstance(url, str):
   esac
 }
 
-# Whether a URL is a web page, the only kind Omdrop opens. A received link can
+# Whether a URL is a web page, the only kind Puffdrop opens. A received link can
 # name file://, smb://, or an app's custom scheme, and it was chosen by
 # whoever is nearby, so everything else is refused before anything launches.
 web_url() {
@@ -2281,15 +2281,15 @@ is_link_file() { case "${1,,}" in *.url|*.webloc) return 0 ;; esac; return 1; }
 # directory we are in, and returns once it has started.
 launch() {
   systemd-run --user --quiet --collect --same-dir "$@" \
-    || echo "omdrop: could not launch: $*" >&2
+    || echo "puffdrop: could not launch: $*" >&2
 }
 
 # A desktop notification: TITLE BODY [IMAGE [FILE]]. With a FILE, clicking the
 # notification opens it. notify-send waits for that click, so it waits in a
-# unit of its own (`omdrop notify-wait`), which the watcher's exit cannot
+# unit of its own (`puffdrop notify-wait`), which the watcher's exit cannot
 # take down. GNOME takes the action named "default" as a click on the
 # notification itself and draws no button for it.
-NOTIFY_ICON="$PROJ/extension/icons/omdrop-symbolic.svg"
+NOTIFY_ICON="$PROJ/extension/icons/puffdrop-symbolic.svg"
 desktop_notify() {
   local title=$1 body=$2 image=${3:-} file=${4:-}
   command -v notify-send >/dev/null 2>&1 || return 1
@@ -2297,13 +2297,13 @@ desktop_notify() {
     launch "$SELF" notify-wait "$title" "$body" "$image" "$file"
     return
   fi
-  notify-send --app-name=Omdrop --icon="$NOTIFY_ICON" ${image:+--hint="string:image-path:$image"} \
+  notify-send --app-name=Puffdrop --icon="$NOTIFY_ICON" ${image:+--hint="string:image-path:$image"} \
     -- "$title" "$body" >/dev/null 2>&1
 }
 
 cmd_notify_wait() {
   local title=$1 body=$2 image=$3 file=$4 action
-  action=$(notify-send --app-name=Omdrop --icon="$NOTIFY_ICON" ${image:+--hint="string:image-path:$image"} \
+  action=$(notify-send --app-name=Puffdrop --icon="$NOTIFY_ICON" ${image:+--hint="string:image-path:$image"} \
              --action=default=Open -- "$title" "$body" 2>/dev/null) || return 0
   [[ "$action" == default ]] && "$SELF" act open "$file"
   return 0
@@ -2322,18 +2322,18 @@ act_open() {
 # A link that is not a web page is refused with a notification, because
 # whoever double-clicked is looking at the file manager, not a terminal.
 cmd_open_link() {
-  local f=${1:?usage: omdrop open-link FILE} url raw why
+  local f=${1:?usage: puffdrop open-link FILE} url raw why
   if url=$(link_target "$f"); then
     launch xdg-open "$url"
     return
   fi
   if raw=$(link_url "$f") && [[ "$raw" == *:* ]]; then
-    why="It points to a ${raw%%:*}: address, and Omdrop opens only web links."
+    why="It points to a ${raw%%:*}: address, and Puffdrop opens only web links."
   else
     why="There is no web link in it."
   fi
   desktop_notify "Can't open $(basename "$f")" "$why" \
-    || echo "omdrop: can't open $f: $why" >&2
+    || echo "puffdrop: can't open $f: $why" >&2
   return 1
 }
 
@@ -2341,8 +2341,8 @@ cmd_open_link() {
 # already knows .url as application/x-mswinurl; .webloc is unknown to
 # shared-mime-info (it detects as text/xml and opens in an editor), so it gets
 # a type of its own, application/x-webloc, a name nothing installed claims.
-LINK_APP=netmojo.omdrop-links.desktop
-LINK_MIME=netmojo.omdrop-webloc.xml
+LINK_APP=io.github.cyborgcode.puffdrop-links.desktop
+LINK_MIME=io.github.cyborgcode.puffdrop-webloc.xml
 LINK_TYPES=(application/x-mswinurl application/x-webloc)
 
 data_home() { printf '%s' "${XDG_DATA_HOME:-$HOME/.local/share}"; }
@@ -2384,9 +2384,9 @@ links_install() {
   apps="$(data_home)/applications"; mime="$(data_home)/mime"
   if write_if_changed "$apps/$LINK_APP" "[Desktop Entry]
 Type=Application
-Name=Omdrop link opener
+Name=Puffdrop link opener
 Comment=Open a link an Apple device sent over AirDrop in the web browser
-Exec=$(desktop_exec_quote "$plugin/bin/omdrop") open-link %f
+Exec=$(desktop_exec_quote "$plugin/bin/puffdrop") open-link %f
 MimeType=application/x-mswinurl;application/x-webloc;
 NoDisplay=true
 Terminal=false"; then
@@ -2402,7 +2402,7 @@ Terminal=false"; then
 </mime-info>'; then
     changed=0
     update-mime-database "$mime" >/dev/null 2>&1 \
-      || echo "omdrop: update-mime-database failed, so .webloc files may still open as XML." >&2
+      || echo "puffdrop: update-mime-database failed, so .webloc files may still open as XML." >&2
   fi
   for t in "${LINK_TYPES[@]}"; do
     current=$(user_default "$t")
@@ -2412,10 +2412,10 @@ Terminal=false"; then
       mkdir -p "$(dirname "$(mimeapps_list)")"
       xdg-mime default "$LINK_APP" "$t" >/dev/null 2>&1
       if [[ "$(user_default "$t")" == "$LINK_APP" ]]; then changed=0
-      else echo "omdrop: could not make Omdrop open $t files. Run: xdg-mime default $LINK_APP $t" >&2
+      else echo "puffdrop: could not make Puffdrop open $t files. Run: xdg-mime default $LINK_APP $t" >&2
       fi
     elif [[ "$current" != "$LINK_APP" ]]; then
-      echo "Left $t opening with $current, which you chose. To open received links with Omdrop: xdg-mime default $LINK_APP $t" >&2
+      echo "Left $t opening with $current, which you chose. To open received links with Puffdrop: xdg-mime default $LINK_APP $t" >&2
     fi
   done
   (( changed == 0 )) && echo "Set up double-clicking a received .url or .webloc link to open it in the browser."
@@ -2447,36 +2447,36 @@ links_remove() {
 
 cmd_links() {
   case "${1:-}" in
-    install) local plugin; plugin=$(plugin_dir) || die "omdrop cannot tell where it is installed."
+    install) local plugin; plugin=$(plugin_dir) || die "puffdrop cannot tell where it is installed."
              links_install "$plugin" || echo "The link handler was already set up." ;;
     remove)  links_remove ;;
-    *) die "usage: omdrop links install|remove" ;;
+    *) die "usage: puffdrop links install|remove" ;;
   esac
 }
 
-# The skill that tells an AI agent how to use omdrop, linked into the skill
+# The skill that tells an AI agent how to use puffdrop, linked into the skill
 # directories AI coding agents read. Only directories
 # that already exist: a missing one belongs to an agent that is not installed.
 #
-# Only `omdrop skill install` writes these links: never setup, never `on`. They
+# Only `puffdrop skill install` writes these links: never setup, never `on`. They
 # put instructions into other programs' configuration, so they are the user's
 # choice, and a removed skill stays removed.
 SKILL_DIRS=("$HOME/.agents/skills" "$HOME/.claude/skills" "$HOME/.codex/skills" "$HOME/.pi/agent/skills")
 
-# A one-line pointer from `omdrop setup`, when an agent is set up and the
+# A one-line pointer from `puffdrop setup`, when an agent is set up and the
 # skill is not linked for it. It changes nothing.
 skills_offer() {
   local dir
   for dir in "${SKILL_DIRS[@]}"; do
-    if [[ -d "$dir" && ! -L "$dir/omdrop" && ! -e "$dir/omdrop" ]]; then
-      printf 'To let AI agents use omdrop, run: omdrop skill install\n'
+    if [[ -d "$dir" && ! -L "$dir/puffdrop" && ! -e "$dir/puffdrop" ]]; then
+      printf 'To let AI agents use puffdrop, run: puffdrop skill install\n'
       return 0
     fi
   done
 }
 
-# An entry named omdrop is replaced only when it is absent, a dangling link,
-# or a link into some checkout's skills/omdrop -- the same rule as the command
+# An entry named puffdrop is replaced only when it is absent, a dangling link,
+# or a link into some checkout's skills/puffdrop -- the same rule as the command
 # on PATH. Judged by the link's own target, not its resolution: a checkout
 # can itself be reached through a link. Anything else, a
 # directory or a live link elsewhere, is left in place with a message.
@@ -2484,61 +2484,61 @@ skills_offer() {
 # or left in place, and 2 when a link could not be made.
 skills_install() {
   local plugin=$1 dir link raw changed=1 failed=0
-  if [[ ! -r "$plugin/skills/omdrop/SKILL.md" ]]; then
-    echo "omdrop could not find its skill at $plugin/skills/omdrop." >&2
+  if [[ ! -r "$plugin/skills/puffdrop/SKILL.md" ]]; then
+    echo "puffdrop could not find its skill at $plugin/skills/puffdrop." >&2
     return 2
   fi
   for dir in "${SKILL_DIRS[@]}"; do
     [[ -d "$dir" ]] || continue
-    link="$dir/omdrop"
+    link="$dir/puffdrop"
     if [[ -L "$link" ]]; then
       raw=$(readlink "$link")
-      [[ "$raw" == "$plugin/skills/omdrop" ]] && continue
-      if [[ -e "$link" && "$raw" != */skills/omdrop ]]; then
+      [[ "$raw" == "$plugin/skills/puffdrop" ]] && continue
+      if [[ -e "$link" && "$raw" != */skills/puffdrop ]]; then
         echo "Left $link alone: it points at $raw." >&2
         continue
       fi
     elif [[ -e "$link" ]]; then
-      echo "Left $link alone: it is not a link omdrop made." >&2
+      echo "Left $link alone: it is not a link puffdrop made." >&2
       continue
     fi
-    if ln -sfn "$plugin/skills/omdrop" "$link"; then
+    if ln -sfn "$plugin/skills/puffdrop" "$link"; then
       changed=0
     else
-      echo "omdrop could not link its skill at $link." >&2
+      echo "puffdrop could not link its skill at $link." >&2
       failed=1
     fi
   done
-  (( changed == 0 )) && echo "Installed the omdrop skill for AI agents."
+  (( changed == 0 )) && echo "Installed the puffdrop skill for AI agents."
   (( failed )) && return 2
   return "$changed"
 }
 
-# Removes only links into some checkout's skills/omdrop, live or
+# Removes only links into some checkout's skills/puffdrop, live or
 # dangling. Fails if any of those could not be removed.
 skills_remove() {
   local dir link raw plugin failed=0
   plugin=$(plugin_dir) || plugin=
   for dir in "${SKILL_DIRS[@]}"; do
-    link="$dir/omdrop"
+    link="$dir/puffdrop"
     [[ -L "$link" ]] || continue
     raw=$(readlink "$link")
-    [[ "$raw" == */skills/omdrop || ( -n "$plugin" && "$raw" == "$plugin/skills/omdrop" ) ]] || continue
-    rm -f "$link" || { echo "omdrop could not remove $link." >&2; failed=1; }
+    [[ "$raw" == */skills/puffdrop || ( -n "$plugin" && "$raw" == "$plugin/skills/puffdrop" ) ]] || continue
+    rm -f "$link" || { echo "puffdrop could not remove $link." >&2; failed=1; }
   done
   (( failed )) && return 1
-  echo "Removed the omdrop skill for AI agents."
+  echo "Removed the puffdrop skill for AI agents."
 }
 
 cmd_skill() {
   local plugin rc
   case "${1:-}" in
-    install) plugin=$(plugin_dir) || die "omdrop cannot tell where it is installed."
+    install) plugin=$(plugin_dir) || die "puffdrop cannot tell where it is installed."
              skills_install "$plugin"; rc=$?
-             (( rc == 1 )) && echo "The omdrop skill for AI agents was already installed."
+             (( rc == 1 )) && echo "The puffdrop skill for AI agents was already installed."
              (( rc != 2 )) ;;
     remove)  skills_remove ;;
-    *) die "usage: omdrop skill install|remove" ;;
+    *) die "usage: puffdrop skill install|remove" ;;
   esac
 }
 
@@ -2554,13 +2554,13 @@ cmd_skill() {
 # Shell's own process. Succeeds only when it was copied; with the extension
 # off, nothing is, and the notification says only where the file went.
 #
-# HEIC/HEIF/AVIF (what an iPhone sends since omdrop 0.16.0) is not a type
+# HEIC/HEIF/AVIF (what an iPhone sends since puffdrop 0.16.0) is not a type
 # anything pastes, so it is decoded once to a JPEG and that goes on the
-# clipboard (omdrop #62). Any failure -- no heif-convert, a timeout, a nonzero
+# clipboard (puffdrop #62). Any failure -- no heif-convert, a timeout, a nonzero
 # exit, no output -- falls back to copying the path. The original is never
 # touched.
-CLIP_PATH=/io/github/cyborgcode/Omdrop
-CLIP_IFACE=io.github.cyborgcode.Omdrop
+CLIP_PATH=/io/github/cyborgcode/Puffdrop
+CLIP_IFACE=io.github.cyborgcode.Puffdrop
 clip_call() {
   gdbus call --session --dest org.gnome.Shell --object-path "$CLIP_PATH" \
     --method "$CLIP_IFACE.$1" "${@:2}" >/dev/null 2>&1
@@ -2624,14 +2624,14 @@ act_notify() {
   local what="Saved to $(tildify "$(dirname "$f")")/"
   copy_to_clipboard "$f" && what="Copied to clipboard, saved to $(tildify "$(dirname "$f")")/"
   desktop_notify "$(basename "$f")" "$what (or click this)" "$image" "$f" \
-    || echo "omdrop: notification failed for $f" >&2
+    || echo "puffdrop: notification failed for $f" >&2
 }
 
 # What to do with a file once the user has asked for it: `act open` is what the
 # notification fires when clicked, and shell/browse are here for the terminal.
 # Each goes through launch(), which keeps the app out of our cgroup.
 cmd_act() {
-  local what=${1:?usage: omdrop act open|shell|browse FILE} f=${2:?}
+  local what=${1:?usage: puffdrop act open|shell|browse FILE} f=${2:?}
   local dir; dir=$(dirname "$f")
   case "$what" in
     open)   act_open "$f" ;;
@@ -2644,7 +2644,7 @@ cmd_act() {
 # One behaviour for every arrival: save, copy, announce. Opening is left to a
 # click on the notification, so nothing runs on the user's behalf unasked.
 cmd_handle() {
-  local f=${1:?usage: omdrop handle FILE}
+  local f=${1:?usage: puffdrop handle FILE}
   act_notify "$f"
 }
 
@@ -2680,7 +2680,7 @@ cmd_dir() {
   mkdir -p "$dropin"
   # An empty assignment resets the list the base unit set; without it a
   # drop-in only ADDS, leaving the old folder writable and listing it twice.
-  { echo "# Written by omdrop. Declares exactly the paths the receiver may write."
+  { echo "# Written by puffdrop. Declares exactly the paths the receiver may write."
     echo "[Service]"
     echo "ReadWritePaths="
     echo "ReadWritePaths=$new"
@@ -2723,7 +2723,7 @@ cmd_sound() {
   case "${1:-}" in
     "")  sound_on && echo on || echo off ;;
     on|off) setting_set sound "$1" ;;
-    *) die "usage: omdrop sound [on|off]" ;;
+    *) die "usage: puffdrop sound [on|off]" ;;
   esac
 }
 
@@ -2743,7 +2743,7 @@ cmd_limit() {
     printf '%s%%\n' "$(effective_limit)"
     return
   fi
-  (( $# == 1 )) || die "usage: omdrop limit [PERCENT]"
+  (( $# == 1 )) || die "usage: puffdrop limit [PERCENT]"
   local new=$1 old
   [[ "$new" =~ ^[0-9]+$ ]] || die "limit: an integer from 1 to 90"
   new=$((10#$new))
@@ -2785,9 +2785,9 @@ cmd_visibility() {
       local n; n=$(sender_count)
       mkdir -p "$CONTACTS_DIR"; printf 'contacts\n' > "$vis_file"
       printf 'Only known senders can send to this machine (%s listed).\n' "$n"
-      (( n == 0 )) && printf 'The list is empty, so everything is refused. Add people with: omdrop senders add <email|phone>\n'
+      (( n == 0 )) && printf 'The list is empty, so everything is refused. Add people with: puffdrop senders add <email|phone>\n'
       ;;
-    *) die "usage: omdrop visibility [everyone|contacts]" ;;
+    *) die "usage: puffdrop visibility [everyone|contacts]" ;;
   esac
   receiving && systemctl --user restart "$UNIT" >/dev/null 2>&1 || true
 }
@@ -2819,7 +2819,7 @@ cmd_senders() {
       fi
       [[ -s "$f" ]] && grep -vE '^\s*(#|$)' "$f" || printf '(no known senders yet)\n' ;;
     add)
-      (( $# )) || die "usage: omdrop senders add <email-or-phone> [...]"
+      (( $# )) || die "usage: puffdrop senders add <email-or-phone> [...]"
       local id
       for id in "$@"; do
         sender_id_valid "$id" \
@@ -2831,14 +2831,14 @@ cmd_senders() {
       done
       printf 'Added. %s known now.\n' "$(sender_count)" ;;
     remove|rm)
-      (( $# )) || die "usage: omdrop senders remove <email-or-phone> [...]"
+      (( $# )) || die "usage: puffdrop senders remove <email-or-phone> [...]"
       [[ -f "$f" ]] || die "no known-senders list yet"
       local id tmp; tmp=$(mktemp)
       cp "$f" "$tmp"
       for id in "$@"; do grep -vxF "$id" "$tmp" > "$tmp.n" && mv "$tmp.n" "$tmp"; done
       mv "$tmp" "$f"
       printf 'Removed. %s known now.\n' "$(sender_count)" ;;
-    *) die "usage: omdrop senders [list|add <id>|remove <id>]" ;;
+    *) die "usage: puffdrop senders [list|add <id>|remove <id>]" ;;
   esac
 }
 
@@ -2898,7 +2898,7 @@ case "${1:-status}" in
   watch)  shift; cmd_watch "$@" ;;
   handle) shift; cmd_handle "$@" ;;
   notify-wait) shift; cmd_notify_wait "$@" ;;
-  -V|--version|version) printf 'omdrop %s\n' "$(omdrop_version)" ;;
+  -V|--version|version) printf 'puffdrop %s\n' "$(puffdrop_version)" ;;
   -h|--help|help) usage ;;
   *)      usage >&2; exit 1 ;;
 esac

@@ -1,4 +1,4 @@
-"""Turning Omdrop off mid-send cuts the transfer, and the other end never hears
+"""Turning Puffdrop off mid-send cuts the transfer, and the other end never hears
 it end. 2026-10-09: a Mac kept the 0-byte file "in use" and stopped accepting
 connections from this machine. `off` asked by a person now refuses while a send
 is running; the timers that close a window still force it.
@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OMDROP = ROOT / "bin" / "omdrop"
+OMDROP = ROOT / "bin" / "puffdrop"
 
 
 class OffDuringSendTests(unittest.TestCase):
@@ -62,7 +62,7 @@ cmd_off {" ".join(args)}
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Still sending to hume", result.stderr)
-        self.assertIn("omdrop off --force", result.stderr)
+        self.assertIn("puffdrop off --force", result.stderr)
         self.assertNotIn("stop", events)
 
     def test_force_turns_off_even_while_sending(self):

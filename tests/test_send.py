@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OMDROP = ROOT / "bin" / "omdrop"
+OMDROP = ROOT / "bin" / "puffdrop"
 
 # What send-to-peer --list reports: address, signal, endpoint.
 ONE_PEER = "e2:9d:03:6c:58:23   -47 dBm  [fe80::e09d:3ff:fe6c:5823%awdl0]:8770"
@@ -111,7 +111,7 @@ echo "    inet6 fe80::1c9a:4bff:fe33:1/64 scope link"
 """,
         )
         # Whether a window is open is the radio helper's to say: awdl0 keeps
-        # its address after `omdrop off`. WINDOW_JSON replaces the answer.
+        # its address after `puffdrop off`. WINDOW_JSON replaces the answer.
         self.discoverable = self.command(
             "omdrop-discoverable",
             """#!/bin/sh
@@ -119,7 +119,7 @@ echo "    inet6 fe80::1c9a:4bff:fe33:1/64 scope link"
 if [ "${WINDOW:-${RADIO:-up}}" = up ]; then echo '{"visible":true}'; else echo '{"visible":false}'; fi
 """,
         )
-        # A send that turns Omdrop on runs `omdrop on`, which starts with
+        # A send that turns Puffdrop on runs `puffdrop on`, which starts with
         # systemd. This one refuses everything and records that it was asked,
         # so activation fails inside the sandbox: HOME is the temporary
         # directory, so nothing is written to the real one.
@@ -261,7 +261,7 @@ class SendLinkTests(SenderFixture):
         result = self.run_omdrop("send", "https://example.com/")
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("omdrop install-driver", result.stderr)
+        self.assertIn("puffdrop install-driver", result.stderr)
         self.assertFalse(self.capture_list.exists())
         self.assertFalse(self.capture.exists())
         file_result = self.run_omdrop("send", str(self.file))
@@ -296,7 +296,7 @@ class SendLinkTests(SenderFixture):
         result = self.run_omdrop("send", "--to", "6c:58", "https://example.com/")
 
         self.assertIn("Turning it on", result.stdout)
-        self.assertTrue(self.systemctl_log.exists(), "omdrop on was never run")
+        self.assertTrue(self.systemctl_log.exists(), "puffdrop on was never run")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("could not be turned on", result.stderr)
         self.assertFalse(self.capture_list.exists())
@@ -308,7 +308,7 @@ class SendLinkTests(SenderFixture):
         result = self.run_omdrop("send", "https://example.com/")
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("omdrop send --to fe:63:e6:68:9f:12 https://example.com/", result.stderr)
+        self.assertIn("puffdrop send --to fe:63:e6:68:9f:12 https://example.com/", result.stderr)
         self.assertFalse(self.capture.exists())
 
 
@@ -348,7 +348,7 @@ class SendCommandTests(SenderFixture):
         result = self.run_omdrop("send", str(self.file))
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("omdrop send --to fe:63:e6:68:9f:12", result.stderr)
+        self.assertIn("puffdrop send --to fe:63:e6:68:9f:12", result.stderr)
         # The sender's own word for --to is --mac; naming it here would point
         # at an option this command does not have.
         self.assertNotIn("--mac", result.stderr)
@@ -366,7 +366,7 @@ class SendCommandTests(SenderFixture):
         result = self.run_omdrop("send", "--to", "aa:bb:cc", str(self.file))
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("omdrop peers", result.stderr)
+        self.assertIn("puffdrop peers", result.stderr)
         self.assertFalse(self.capture.exists())
 
     def test_an_empty_room_says_a_window_is_what_hears_devices(self):
@@ -375,7 +375,7 @@ class SendCommandTests(SenderFixture):
         result = self.run_omdrop("send", str(self.file))
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("omdrop on", result.stderr)
+        self.assertIn("puffdrop on", result.stderr)
         self.assertFalse(self.capture.exists())
 
     def test_a_peer_table_that_cannot_be_read_is_not_an_empty_room(self):
@@ -444,7 +444,7 @@ class SendCommandTests(SenderFixture):
         one = self.run_omdrop("send", str(self.file))
 
         self.assertNotEqual(several.returncode, 0)
-        self.assertIn("omdrop install-driver", several.stderr)
+        self.assertIn("puffdrop install-driver", several.stderr)
         self.assertEqual(one.returncode, 0, one.stderr)
 
     def test_with_omdrop_off_a_send_without_a_name_turns_nothing_on(self):
@@ -455,8 +455,8 @@ class SendCommandTests(SenderFixture):
         result = self.run_omdrop("send", str(self.file))
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("omdrop send NAME", result.stderr)
-        self.assertIn("omdrop on", result.stderr)
+        self.assertIn("puffdrop send NAME", result.stderr)
+        self.assertIn("puffdrop on", result.stderr)
         self.assertFalse(self.systemctl_log.exists())
         self.assertFalse(self.capture_list.exists())
         self.assertFalse(self.capture.exists())
@@ -466,7 +466,7 @@ class SendCommandTests(SenderFixture):
 
         result = self.run_omdrop("send", str(self.file))
 
-        self.assertIn("Omdrop is off", result.stderr)
+        self.assertIn("Puffdrop is off", result.stderr)
         self.assertFalse(self.capture_list.exists())
 
     def test_an_open_window_is_read_from_the_helpers_json_however_it_is_spaced(self):
@@ -485,7 +485,7 @@ class SendCommandTests(SenderFixture):
 
                 result = self.run_omdrop("send", str(self.file))
 
-                self.assertIn("Omdrop is off", result.stderr)
+                self.assertIn("Puffdrop is off", result.stderr)
                 self.assertFalse(self.capture_list.exists())
 
     def test_a_delivered_file_is_reported_without_the_protocol_log(self):
@@ -600,7 +600,7 @@ class SendCommandTests(SenderFixture):
         result = self.run_omdrop("send", str(self.file))
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("omdrop install-driver", result.stderr)
+        self.assertIn("puffdrop install-driver", result.stderr)
 
     def test_peers_json_gives_the_panel_names_only_where_a_device_answered(self):
         self.env["PEER_LIST"] = "\n".join([
@@ -667,8 +667,8 @@ class NamedRecipientTests(SenderFixture):
         result = self.run_omdrop("send", "studio mac", str(self.file))
 
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("omdrop send --to 02:00:00:00:00:01", result.stderr)
-        self.assertIn("omdrop send --to 02:00:00:00:00:02", result.stderr)
+        self.assertIn("puffdrop send --to 02:00:00:00:00:01", result.stderr)
+        self.assertIn("puffdrop send --to 02:00:00:00:00:02", result.stderr)
         self.assertFalse(self.capture.exists())
 
     def test_ambiguous_substrings_are_refused(self):

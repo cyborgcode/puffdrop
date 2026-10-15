@@ -1,4 +1,4 @@
-"""What `omdrop handle` puts on the clipboard for a received HEIC (#62).
+"""What `puffdrop handle` puts on the clipboard for a received HEIC (#62).
 
 wl-copy is a stand-in that records its arguments and stdin, so the live
 clipboard is never touched.
@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OMDROP = ROOT / "bin" / "omdrop"
+OMDROP = ROOT / "bin" / "puffdrop"
 HEIF_CONVERT = shutil.which("heif-convert")
 MAGICK = shutil.which("magick")
 HEIF_ENC = shutil.which("heif-enc")
@@ -86,7 +86,7 @@ class HeicClipboardTests(unittest.TestCase):
         self.assert_nothing_left()
 
     def test_a_missing_decoder_falls_back_to_the_path(self):
-        # A PATH holding only the stubs and the basics omdrop needs, none of
+        # A PATH holding only the stubs and the basics puffdrop needs, none of
         # which is heif-convert.
         for tool in ("bash", "dirname", "basename", "id", "mkdir", "mktemp", "rm",
                      "timeout", "cat", "ls", "wc", "sed", "grep", "tr", "head"):

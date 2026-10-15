@@ -2,7 +2,7 @@
 
 keyctl_read_alloc returns int. Declared as long, its -1 came back as
 4294967295 on aarch64, passed the error check, and string_at(NULL, 4 GiB)
-killed the process: `omdrop identity status` segfaulted in any session
+killed the process: `puffdrop identity status` segfaulted in any session
 that could see the cached key but not read it. Run in a subprocess, so a
 crash fails the test instead of killing the suite.
 """

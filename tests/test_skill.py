@@ -1,6 +1,6 @@
-"""`omdrop skill`: the agent skill is linked where Omarchy's agents look.
-An entry named omdrop is replaced only when absent, dangling, or a link into
-a plugin's skills/omdrop; remove takes back only such links."""
+"""`puffdrop skill`: the agent skill is linked where AI coding agents look.
+An entry named puffdrop is replaced only when absent, dangling, or a link into
+a checkout's skills/puffdrop; remove takes back only such links."""
 import os
 import subprocess
 import tempfile
@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-OMDROP = ROOT / "bin" / "omdrop"
-SKILL = ROOT / "skills" / "omdrop"
+OMDROP = ROOT / "bin" / "puffdrop"
+SKILL = ROOT / "skills" / "puffdrop"
 
 
 class SkillTests(unittest.TestCase):
@@ -19,7 +19,7 @@ class SkillTests(unittest.TestCase):
         self.home = Path(tmp.name)
         self.claude = self.home / ".claude" / "skills"
         self.claude.mkdir(parents=True)
-        self.link = self.claude / "omdrop"
+        self.link = self.claude / "puffdrop"
         self.env = dict(os.environ, HOME=str(self.home))
 
     def omdrop(self, *args):
@@ -53,7 +53,7 @@ class SkillTests(unittest.TestCase):
         self.assertEqual(os.readlink(self.link), str(mine))
 
     def test_a_link_into_another_plugin_copy_is_replaced(self):
-        old = self.home / "plugins" / "netmojo.omdrop" / "skills" / "omdrop"
+        old = self.home / "old-checkout" / "skills" / "puffdrop"
         old.mkdir(parents=True)
         self.link.symlink_to(old)
 
@@ -73,7 +73,7 @@ class SkillTests(unittest.TestCase):
         self.omdrop("skill", "remove")
         self.assertFalse(os.path.lexists(self.link))
 
-        self.link.symlink_to(self.home / "plugins" / "gone" / "skills" / "omdrop")
+        self.link.symlink_to(self.home / "gone" / "skills" / "puffdrop")
         self.omdrop("skill", "remove")
         self.assertFalse(os.path.lexists(self.link))
 
@@ -109,7 +109,7 @@ class SkillTests(unittest.TestCase):
 
     def test_setup_leaves_the_skill_to_the_user(self):
         # The skill writes into other programs' configuration, so only
-        # `omdrop skill install` may link it. Setup points at that command.
+        # `puffdrop skill install` may link it. Setup points at that command.
         stubs = self.home / "stubs"
         stubs.mkdir()
         for command in ("systemctl", "update-desktop-database", "xdg-mime"):
@@ -121,7 +121,7 @@ class SkillTests(unittest.TestCase):
         result = self.omdrop("setup")
 
         self.assertFalse(os.path.lexists(self.link), result.stdout + result.stderr)
-        self.assertIn("omdrop skill install", result.stdout)
+        self.assertIn("puffdrop skill install", result.stdout)
 
 
 if __name__ == "__main__":

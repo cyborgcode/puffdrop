@@ -1,6 +1,6 @@
-# Contributing to Omdrop
+# Contributing to Puffdrop
 
-Bug reports and pull requests are welcome. Omdrop's behaviour depends on Apple devices, Wi-Fi hardware, and radio backends that reviewers often can't reproduce, so a pull request is reviewed on the evidence it includes. This page lists what to include.
+Bug reports and pull requests are welcome. Puffdrop's behaviour depends on Apple devices, Wi-Fi hardware, and radio backends that reviewers often can't reproduce, so a pull request is reviewed on the evidence it includes. This page lists what to include.
 
 ## What a pull request needs
 
@@ -14,28 +14,26 @@ Describe what the change does, then provide each of the following that applies.
 
 ### Your setup
 
-Paste the whole output of this command. It reports the computer's model, Wi-Fi chip, kernel, radio backend, Omdrop's version and readiness, the identity in use, the Wi-Fi firmware, and `awdl0`. omdrop-awdl's hardware-report form asks for the same details.
+Paste the whole output of this command. It reports the computer's model, Wi-Fi chip, kernel, radio backend, Puffdrop's version and readiness, the identity in use, the Wi-Fi firmware, and `awdl0`. omdrop-awdl's hardware-report form asks for the same details.
 
 ```bash
-{ tr -d '\0' < /proc/device-tree/model 2>/dev/null || cat /sys/class/dmi/id/product_name; echo; lspci -nn | grep -i network; uname -r; pacman -Q brcmfmac-awdl-dkms omdrop-owl; omdrop --version; omdrop doctor --json; omdrop identity; journalctl -k -b | grep -m1 'brcmfmac.*Firmware:'; ip -br link show awdl0; } 2>&1
+{ tr -d '\0' < /proc/device-tree/model 2>/dev/null || cat /sys/class/dmi/id/product_name; echo; lspci -nn | grep -i network; uname -r; dpkg -l omdrop-owl | tail -1; puffdrop --version; puffdrop doctor --json; puffdrop identity; journalctl -k -b | grep -m1 'brcmfmac.*Firmware:'; ip -br link show awdl0; } 2>&1
 ```
-
-One of the two radio backend packages is reported as not found; that's expected.
 
 Also give:
 
 - Each Apple device involved: its model and OS version, such as "iPhone 15 Pro, iOS 26.1".
 - The visibility mode on each side (Everyone or Contacts Only).
-- For panel or QML changes: `pacman -Q qt6-declarative quickshell` and your Omarchy version.
+- For panel changes: `gnome-shell --version`, and the output of `journalctl --user -b | grep -i puffdrop`.
 
 ### Evidence from real hardware
 
-If the change affects how Omdrop talks to an Apple device, show the behaviour before and after the change on real hardware. Paste text, not screenshots, and include the lines that show the behaviour you describe.
+If the change affects how Puffdrop talks to an Apple device, show the behaviour before and after the change on real hardware. Paste text, not screenshots, and include the lines that show the behaviour you describe.
 
 | What changed | Where to get the evidence |
 |---|---|
 | Receiving | `journalctl --user -u airdrop-receiver --since "15 min ago"`. Useful lines include `ask from …`, `upload …: decoded to N bytes, magic …`, `stored …`, and the HTTP status of each request. |
-| Sending | The output of `omdrop send --verbose …`. It also writes protocol dumps to `$XDG_RUNTIME_DIR/omdrop/debug`, with validation records and certificates replaced by their size. |
+| Sending | The output of `puffdrop send --verbose …`. It also writes protocol dumps to `$XDG_RUNTIME_DIR/omdrop/debug`, with validation records and certificates replaced by their size. |
 | The radio | The radio backend's log. For omdrop-awdl, that's `/run/awdl-discoverable/log` during the window. |
 | A new content type, header, or protocol field | The receiver log line showing what the device actually sent. A test that builds the input itself shows that the code accepts it, not that a real device sends it. |
 

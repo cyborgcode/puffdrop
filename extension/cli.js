@@ -1,5 +1,5 @@
 // The panel holds no state of its own: every action and every answer goes
-// through the omdrop command, the same one a terminal uses.
+// through the puffdrop command, the same one a terminal uses.
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -11,7 +11,7 @@ Gio._promisify(Gio.DataInputStream.prototype, 'read_line_async', 'read_line_fini
 const PIPES = Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE;
 const decoder = new TextDecoder();
 
-// The command beside this extension in its checkout, which is where `omdrop
+// The command beside this extension in its checkout, which is where `puffdrop
 // setup` links the extension from; else the one setup put on PATH.
 export function findCli(extensionPath) {
     let dir = extensionPath;
@@ -23,14 +23,14 @@ export function findCli(extensionPath) {
     } catch {
         // Not a link: the extension sits in its checkout already.
     }
-    const beside = GLib.canonicalize_filename(GLib.build_filenamev([dir, '..', 'bin', 'omdrop']), null);
+    const beside = GLib.canonicalize_filename(GLib.build_filenamev([dir, '..', 'bin', 'puffdrop']), null);
     if (GLib.file_test(beside, GLib.FileTest.IS_EXECUTABLE))
         return beside;
     // Installed from a zip, the extension is a copy with no checkout beside
     // it: use the command setup linked onto PATH, resolved to its checkout so
     // the sounds beside it are found too.
-    const onPath = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'omdrop']);
-    const found = GLib.file_test(onPath, GLib.FileTest.IS_EXECUTABLE) ? onPath : GLib.find_program_in_path('omdrop');
+    const onPath = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'puffdrop']);
+    const found = GLib.file_test(onPath, GLib.FileTest.IS_EXECUTABLE) ? onPath : GLib.find_program_in_path('puffdrop');
     if (!found)
         return beside;
     try {

@@ -1,6 +1,6 @@
 """The config is read with tomli where tomllib is missing (Python < 3.11).
 
-Ubuntu 22.04 ships Python 3.10: the receiver, `omdrop name` and every other
+Ubuntu 22.04 ships Python 3.10: the receiver, `puffdrop name` and every other
 config read died on `import tomllib`. A sitecustomize hides tomllib and offers
 the same parser as tomli, so these tests fail without the fallback on any
 Python version.
@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CLI = ROOT / "bin" / "omdrop"
+CLI = ROOT / "bin" / "puffdrop"
 SERVE = ROOT / "bin" / "airdrop-serve.py"
 
 SITECUSTOMIZE = textwrap.dedent("""\
@@ -74,7 +74,7 @@ class TomllibFallbackTests(unittest.TestCase):
         site = self.home / "site"
         site.mkdir()
         (site / "sitecustomize.py").write_text(SITECUSTOMIZE)
-        # Nothing is receiving, so `omdrop name` never restarts the real unit.
+        # Nothing is receiving, so `puffdrop name` never restarts the real unit.
         bin_dir = self.home / "bin"
         bin_dir.mkdir()
         systemctl = bin_dir / "systemctl"

@@ -1,4 +1,4 @@
-"""The first `omdrop on` sets up a fresh install without being asked.
+"""The first `puffdrop on` sets up a fresh install without being asked.
 
 Issue 12: on a fresh install the panel's switch refused with "Run: omdrop
 setup", but `omdrop` reaches PATH only through `setup` itself, so the command
@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OMDROP = ROOT / "bin" / "omdrop"
+OMDROP = ROOT / "bin" / "puffdrop"
 
 # A user systemd that knows a unit only once its file exists, and refuses to
 # start anything, so the run stops right after setup with nothing left behind.
@@ -54,10 +54,10 @@ class FirstUseTests(unittest.TestCase):
                                     capture_output=True, text=True, timeout=60)
             output = result.stdout + result.stderr
 
-            self.assertNotIn("Run: omdrop setup", output)
+            self.assertNotIn("Run: puffdrop setup", output)
             self.assertTrue(
                 (home / ".config/systemd/user/airdrop-receiver.service").is_file(), output)
-            link = home / ".local/bin/omdrop"
+            link = home / ".local/bin/puffdrop"
             self.assertEqual(link.resolve(), OMDROP.resolve(), output)
 
 
