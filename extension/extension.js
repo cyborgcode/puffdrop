@@ -19,8 +19,8 @@ import St from 'gi://St';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
 import {Cli, findCli} from './cli.js';
@@ -124,25 +124,22 @@ function holder(styleClass = '') {
     return item;
 }
 
-const Indicator = GObject.registerClass(
-class PuffdropIndicator extends PanelMenu.Button {
-    _init(extension) {
-        super._init(0.5, 'Puffdrop');
+// The Quick Settings toggle, beside the system's own: a click turns Puffdrop
+// on or off, and its arrow opens the full menu.
+const Toggle = GObject.registerClass(
+class PuffdropToggle extends QuickSettings.QuickMenuToggle {
+    _init(extension, panelIcon, panelAnim) {
+        const gicon = Gio.icon_new_for_string(`${extension.path}/icons/puffdrop-symbolic.svg`);
+        super._init({title: 'Puffdrop', gicon, toggleMode: false});
         this._extension = extension;
         this._cli = new Cli(findCli(extension.path));
-        this._gicon = Gio.icon_new_for_string(`${extension.path}/icons/puffdrop-symbolic.svg`);
+        this._gicon = gicon;
         this._giconCrossed = Gio.icon_new_for_string(`${extension.path}/icons/puffdrop-crossed-symbolic.svg`);
         this._soundDir = GLib.build_filenamev([GLib.path_get_dirname(GLib.path_get_dirname(this._cli.path)), 'share', 'sounds']);
-
-        this._panelIcon = new St.Icon({gicon: this._gicon, style_class: 'system-status-icon puffdrop-panel-icon'});
-        this._panelIcon.set_pivot_point(0.5, 0.5);
-        // While on, the animated mark stands in for the still one.
-        this._panelAnim = new AnimatedIcon(16, 'puffdrop-panel-anim');
-        this._panelAnim.visible = false;
-        const panelBox = new St.BoxLayout({y_align: Clutter.ActorAlign.CENTER});
-        panelBox.add_child(this._panelIcon);
-        panelBox.add_child(this._panelAnim);
-        this.add_child(panelBox);
+        // The icons beside the system's in the top bar, shown while it matters.
+        this._panelIcon = panelIcon;
+        this._panelAnim = panelAnim;
+        this.connect('clicked', () => this._toggle());
 
         this._state = {
             installed: false, receiving: false, visibility: -1, remaining: -1,
@@ -338,7 +335,20 @@ class PuffdropIndicator extends PanelMenu.Button {
     // -------------------------------------------------------------- menu
 
     _buildMenu() {
-        const menu = this.menu;
+        // Everything goes in one section inside a scroll view: with the radar
+        // open the menu is taller than Quick Settings has room for.
+        const menu = new PopupMenu.PopupMenuSection();
+        this.menu.addMenuItem(menu);
+        this.menu.box.remove_child(menu.actor);
+        this._scroll = new St.ScrollView({
+            style_class: 'puffdrop-scroll',
+            hscrollbar_policy: St.PolicyType.NEVER,
+            vscrollbar_policy: St.PolicyType.AUTOMATIC,
+            overlay_scrollbars: true,
+            x_expand: true,
+        });
+        this._scroll.set_child(menu.actor);
+        this.menu.box.add_child(this._scroll);
 
         // The switch, and the state it controls.
         this._hero = new ActionItem(() => this._toggle(), {style_class: 'puffdrop-hero'});
@@ -563,14 +573,22 @@ class PuffdropIndicator extends PanelMenu.Button {
         const usable = this._usable;
         const lit = s.busy || s.receiving;
 
-        this._panelIcon.gicon = usable ? this._gicon : this._giconCrossed;
-        this._panelIcon.opacity = lit ? 255 : 140;
+        this._panelIcon.gicon = this._gicon;
+        this.gicon = usable ? this._gicon : this._giconCrossed;
+        this.checked = s.receiving;
+        this.subtitle = this._stateText;
+        // The menu's own header names the state; the countdown joins it.
+        this.menu.setHeader(this.gicon, 'Puffdrop',
+            this._countdownText ? `${this._stateText} · ${this._countdownText}` : this._stateText);
+        this._hero.visible = false;
         this._heroIcon.gicon = usable ? this._gicon : this._giconCrossed;
         this._heroIcon.opacity = lit ? 255 : 140;
         this._setDrifting(s.busy || this._settling);
         const on = usable && s.receiving && s.visibility === 1 && !s.busy;
         this._panelAnim.visible = this._heroAnim.visible = on;
-        this._panelIcon.visible = this._heroIcon.visible = !on;
+        this._heroIcon.visible = !on;
+        // In the top bar only while on, or on its way: like Caffeine's.
+        this._panelIcon.visible = !on && (s.busy || this._settling);
 
         this._stateLabel.text = this._stateText;
         this._countdownLabel.text = this._countdownText;
@@ -669,24 +687,31 @@ class PuffdropIndicator extends PanelMenu.Button {
         if (this._drifting === drifting)
             return;
         this._drifting = drifting;
-        for (const icon of [this._panelIcon, this._heroIcon]) {
-            if (drifting)
-                this._drift(icon, 0);
-            else
-                icon.ease({translation_y: 0, rotation_angle_z: 0, duration: 400, mode: Clutter.AnimationMode.EASE_OUT_SINE});
+        if (drifting) {
+            this._drift(0);
+            return;
         }
+        this._stopTimer('drift');
+        for (const icon of [this._panelIcon, this._heroIcon])
+            icon.ease({translation_y: 0, rotation_angle_z: 0, duration: 400, mode: Clutter.AnimationMode.EASE_OUT_SINE});
     }
 
-    _drift(icon, step) {
+    // Each swing is started by a timer, never from the previous swing's end:
+    // GNOME finishes an animation on a hidden actor at once, and a chain of
+    // onComplete calls then recursed until the stack overflowed, taking the
+    // render -- and the turn-off it was part of -- down with it.
+    _drift(step) {
         if (!this._drifting)
             return;
-        const swings = [[1.6, 4], [-1.6, -4]];
-        const [y, angle] = swings[step % 2];
-        icon.ease({
-            translation_y: y, rotation_angle_z: angle, duration: step === 0 ? 800 : 1600,
-            mode: Clutter.AnimationMode.EASE_IN_OUT_SINE,
-            onComplete: () => this._drift(icon, step + 1),
-        });
+        const [y, angle] = step % 2 === 0 ? [1.6, 4] : [-1.6, -4];
+        const duration = step === 0 ? 800 : 1600;
+        for (const icon of [this._panelIcon, this._heroIcon]) {
+            if (icon.mapped) {
+                icon.ease({translation_y: y, rotation_angle_z: angle, duration,
+                    mode: Clutter.AnimationMode.EASE_IN_OUT_SINE});
+            }
+        }
+        this._once('drift', duration, () => this._drift(step + 1));
     }
 
     // ------------------------------------------------------------ timers
@@ -890,7 +915,7 @@ class PuffdropIndicator extends PanelMenu.Button {
     // The terminal it opens is the interface from here on; asking again when
     // it returns catches the case where they installed.
     async _installDriver() {
-        this.menu.close();
+        this._closeMenu();
         await this._cli.run(['install-driver']);
         if (this._destroyed)
             return;
@@ -994,7 +1019,7 @@ class PuffdropIndicator extends PanelMenu.Button {
         this._render();
         // The menu holds the pointer and keyboard, so it steps aside while the
         // chooser is open and comes back with the answer.
-        this.menu.close();
+        this._closeMenu();
         const title = 'Save received files to';
         this._raiseChooser(title);
         const result = await this._cli.run(['dir', '--pick']);
@@ -1004,7 +1029,7 @@ class PuffdropIndicator extends PanelMenu.Button {
         s.pickingDir = false;
         if (result.stderr.trim() !== '')
             s.lastError = result.stderr.trim();
-        this.menu.open();
+        this._openMenu();
         this._refreshStatus();
     }
 
@@ -1322,7 +1347,7 @@ class PuffdropIndicator extends PanelMenu.Button {
                 if (!s.sendChosen) {
                     s.sendChosen = true;
                     this._cancelRaise();
-                    this.menu.open();
+                    this._openMenu();
                 }
                 const chosen = /^Preparing (.*)\.\.\.$/.exec(line);
                 if (chosen)
@@ -1349,14 +1374,14 @@ class PuffdropIndicator extends PanelMenu.Button {
         this._sendProc = proc;
         // Out of the chooser's way, and back when it answers. Only now that
         // the send is running, so closing does not fold the radar away.
-        this.menu.close();
+        this._closeMenu();
         this._render();
         done.then(code => {
             this._sendProc = null;
             if (this._destroyed)
                 return;
             this._cancelRaise();
-            this.menu.open();
+            this._openMenu();
             // A cancelled chooser is exit 1 with nothing said, and a send the
             // person cancelled is not a failure: the row is just a row again.
             if (s.sendCancelled || (code !== 0 && !s.sendChosen && s.sendStatus === 'Choose files…')) {
@@ -1371,7 +1396,7 @@ class PuffdropIndicator extends PanelMenu.Button {
                 this._once('sendClose', 1800, () => {
                     Object.assign(s, {sendingTo: '', sendStatus: '', sendDone: false});
                     this._render();
-                    this.menu.close();
+                    this._closeMenu();
                 });
             }
             this._render();
@@ -1441,6 +1466,8 @@ class PuffdropIndicator extends PanelMenu.Button {
     // menu has only stepped aside for a chooser.
     _openChanged(open) {
         const s = this._state;
+        if (open)
+            this._fitToScreen();
         if (open && !s.busy)
             this._refreshStatus();
         if (!open && !this._sendRunning && !s.pickingDir)
@@ -1466,13 +1493,24 @@ class PuffdropIndicator extends PanelMenu.Button {
         return Clutter.EVENT_PROPAGATE;
     }
 
-    // A right click on the icon turns Puffdrop on or off without opening the menu.
-    vfunc_event(event) {
-        if (event.type() === Clutter.EventType.BUTTON_PRESS && event.get_button() === Clutter.BUTTON_SECONDARY) {
-            this._toggle();
-            return Clutter.EVENT_STOP;
-        }
-        return super.vfunc_event(event);
+    // Leave room for the Quick Settings grid above the menu: the rest of the
+    // screen height, in logical pixels, is what the scroll view may use.
+    _fitToScreen() {
+        const area = Main.layoutManager.getWorkAreaForMonitor(Main.layoutManager.primaryIndex);
+        const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        const max = Math.max(240, Math.round(area.height * 0.55 / scale));
+        this._scroll.style = `max-height: ${max}px;`;
+    }
+
+    // The menu lives inside Quick Settings: stepping aside for a chooser
+    // closes all of it, and coming back reopens both.
+    _closeMenu() {
+        Main.panel.statusArea.quickSettings.menu.close();
+    }
+
+    _openMenu() {
+        Main.panel.statusArea.quickSettings.menu.open();
+        this.menu.open();
     }
 
     _teardown() {
@@ -1485,10 +1523,31 @@ class PuffdropIndicator extends PanelMenu.Button {
     }
 });
 
+const Indicator = GObject.registerClass(
+class PuffdropIndicator extends QuickSettings.SystemIndicator {
+    _init(extension) {
+        super._init();
+        const icon = this._addIndicator();
+        icon.set_pivot_point(0.5, 0.5);
+        icon.visible = false;
+        // While on, the animated mark stands in for the still one.
+        const anim = new AnimatedIcon(16, 'puffdrop-panel-anim');
+        anim.visible = false;
+        anim.connect('notify::visible', () => this._syncIndicatorsVisible());
+        this.add_child(anim);
+        this.quickSettingsItems.push(new Toggle(extension, icon, anim));
+    }
+
+    destroy() {
+        this.quickSettingsItems.forEach(item => item.destroy());
+        super.destroy();
+    }
+});
+
 export default class PuffdropExtension extends Extension {
     enable() {
         this._indicator = new Indicator(this);
-        Main.panel.addToStatusArea(this.uuid, this._indicator);
+        Main.panel.statusArea.quickSettings.addExternalIndicator(this._indicator);
         // Received files go on the clipboard through here: Mutter offers
         // background programs no way to set it, and GNOME Shell owns it.
         this._dbus = Gio.DBusExportedObject.wrapJSObject(DBUS_IFACE, this);

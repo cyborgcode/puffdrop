@@ -1,0 +1,3 @@
+#!/bin/bash
+[[ "$*" == *awdl0* ]] && { echo "    inet6 fe80::1/64 scope link"; exit 0; }
+exec /usr/bin/ip "$@"

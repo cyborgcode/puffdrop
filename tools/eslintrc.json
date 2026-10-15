@@ -1,0 +1,3 @@
+{ "root": true, "parserOptions": {"ecmaVersion": 2020, "sourceType": "module"}, "env": {"es6": true},
+  "globals": {"global": "readonly", "console": "readonly", "log": "readonly", "logError": "readonly", "print": "readonly", "TextDecoder": "readonly"},
+  "rules": {"no-undef": "error", "no-unused-vars": ["error", {"args": "none"}], "no-unreachable": "error", "no-dupe-keys": "error", "no-redeclare": "error", "no-dupe-class-members": "error"} }

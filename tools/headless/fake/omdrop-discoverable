@@ -1,0 +1,6 @@
+#!/bin/bash
+case "$1" in
+  status) echo '{"visible":true,"remaining":null,"reason":"ok","rx_proven":true,"peer_op":"none"}' ;;
+  probe) echo '{"backend":"owl","version":"0.2.0","contract":"0.8.1","hardware":true,"missing":[]}' ;;
+  *) exit 0 ;;
+esac

@@ -1,0 +1,7 @@
+#!/bin/bash
+if [[ " $* " == *" --help "* ]]; then echo "usage: send-to-peer [--list] [--names] [--stream] [--url URL] [--mac MAC] [file ...]"; exit 0; fi
+rows=("3a:1f:9c:22:01:7e -48 dBm [fe80::1]:8770|Rayen's iPhone" "be:42:07:aa:19:c3 -63 dBm [fe80::2]:8770|Studio Mac")
+named=0; [[ " $* " == *" --names "* ]] && named=1
+for r in "${rows[@]}"; do line=${r%%|*}; name=${r#*|}; if (( named )); then printf '%s  %s\n' "$line" "$name"; else printf '%s\n' "$line"; fi; done
+(( named )) && sleep 20
+exit 0

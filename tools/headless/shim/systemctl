@@ -1,0 +1,10 @@
+#!/bin/bash
+# Receiving is a file in $STATE, so on and off change what status reports.
+st=$STATE/receiving
+case " $* " in
+  *" is-active "*airdrop-receiver*) [[ -e $st ]] && { echo active; exit 0; } || { echo inactive; exit 3; } ;;
+  *" start "*airdrop-receiver*|*" restart "*airdrop-receiver*) touch "$st"; exit 0 ;;
+  *" stop "*airdrop-receiver*) rm -f "$st"; exit 0 ;;
+  *" show "*) echo; exit 0 ;;
+  *) exit 0 ;;
+esac
