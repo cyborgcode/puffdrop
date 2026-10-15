@@ -26,10 +26,19 @@ export function findCli(extensionPath) {
     const beside = GLib.canonicalize_filename(GLib.build_filenamev([dir, '..', 'bin', 'omdrop']), null);
     if (GLib.file_test(beside, GLib.FileTest.IS_EXECUTABLE))
         return beside;
+    // Installed from a zip, the extension is a copy with no checkout beside
+    // it: use the command setup linked onto PATH, resolved to its checkout so
+    // the sounds beside it are found too.
     const onPath = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'omdrop']);
-    if (GLib.file_test(onPath, GLib.FileTest.IS_EXECUTABLE))
-        return onPath;
-    return GLib.find_program_in_path('omdrop') ?? beside;
+    const found = GLib.file_test(onPath, GLib.FileTest.IS_EXECUTABLE) ? onPath : GLib.find_program_in_path('omdrop');
+    if (!found)
+        return beside;
+    try {
+        return Gio.File.new_for_path(found).query_info('standard::symlink-target', Gio.FileQueryInfoFlags.NONE, null)
+            .get_symlink_target() ?? found;
+    } catch {
+        return found;
+    }
 }
 
 export class Cli {

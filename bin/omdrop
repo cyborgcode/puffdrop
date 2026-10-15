@@ -666,29 +666,20 @@ extension_install() {
   fi
   echo "Installed the Omdrop panel, a GNOME Shell extension."
   if extension_enable "$EXT_UUID"; then
-    echo "Enabled it. Log out and back in once, and its icon appears in the top bar."
+    echo "Enabled it; its icon is in the top bar."
   else
-    echo "Enable it in the Extensions app, or with: gnome-extensions enable $EXT_UUID" >&2
+    echo "Log out and back in once, then switch it on in Extensions (or: gnome-extensions enable $EXT_UUID)."
   fi
   return 0
 }
 
-# Add an extension to GNOME Shell's enabled list (and take it off the disabled
-# one). Fails where there is no GNOME Shell schema to write to.
+# Ask the running GNOME Shell to enable an extension. The shell edits its own
+# enabled list, so nothing here reads or rewrites that list -- a read that
+# came back empty (a sandbox, a dconf hiccup) once wrote the list back holding
+# only this extension, switching every other one off. Fails when the shell
+# does not know the extension yet, which on Wayland is until the next login.
 extension_enable() {
-  python3 -c '
-import sys
-from gi.repository import Gio
-source = Gio.SettingsSchemaSource.get_default()
-if source is None or source.lookup("org.gnome.shell", True) is None:
-    sys.exit(2)
-settings = Gio.Settings.new("org.gnome.shell")
-enabled = settings.get_strv("enabled-extensions")
-if sys.argv[1] not in enabled:
-    settings.set_strv("enabled-extensions", enabled + [sys.argv[1]])
-settings.set_strv("disabled-extensions",
-                  [u for u in settings.get_strv("disabled-extensions") if u != sys.argv[1]])
-Gio.Settings.sync()' "$1" 2>/dev/null
+  command -v gnome-extensions >/dev/null 2>&1 && gnome-extensions enable "$1" 2>/dev/null
 }
 
 # Everything `setup` installs, each step idempotent. Returns 0 when it changed
