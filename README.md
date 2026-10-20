@@ -46,7 +46,7 @@ Log out and back in for a new panel to load.
 
 Click the icon to open the panel:
 
-- **The switch** turns receiving on and off. Right-clicking the icon does the same. While Puffdrop is on, the icon's arcs turn.
+- **The Puffdrop toggle** in Quick Settings, beside the system's own, turns receiving on and off; its arrow opens the menu below. While Puffdrop is on, its icon shows in the top bar.
 - **Stay visible for** sets how long you stay visible: one file, a set time, or until you turn it off. The choice is remembered.
 - **Everyone / Contacts Only** chooses who may send. The people button opens the known-senders list.
 - **They see you as** sets the name Apple devices show. It defaults to the hostname.
@@ -106,6 +106,10 @@ rm -rf ~/.omdrop                    # this computer's AirDrop identity
 sudo apt install python3-libarchive-c keyutils openssl
 python3 -m unittest discover -s tests
 ```
+
+## Credits
+
+Puffdrop is based on [Omdrop](https://github.com/netmojo-systems/omdrop-plugin) by Brent Kearney. The radio backend is [omdrop-owl](https://github.com/t4t5/omdrop-owl). The icon is [AirDrop](https://thenounproject.com/) by Lars Meiertoberens, from Noun Project, used under CC BY 3.0.
 
 ## Trademark
 

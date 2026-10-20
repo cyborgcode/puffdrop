@@ -24,7 +24,6 @@ import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js'
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 
 import {Cli, findCli} from './cli.js';
-import {AnimatedIcon} from './icon.js';
 import {Radar} from './radar.js';
 
 // Discrete stops rather than a free scale: the useful values are few, and the
@@ -128,7 +127,7 @@ function holder(styleClass = '') {
 // on or off, and its arrow opens the full menu.
 const Toggle = GObject.registerClass(
 class PuffdropToggle extends QuickSettings.QuickMenuToggle {
-    _init(extension, panelIcon, panelAnim) {
+    _init(extension, panelIcon) {
         const gicon = Gio.icon_new_for_string(`${extension.path}/icons/puffdrop-symbolic.svg`);
         super._init({title: 'Puffdrop', gicon, toggleMode: false});
         this._extension = extension;
@@ -138,7 +137,6 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         this._soundDir = GLib.build_filenamev([GLib.path_get_dirname(GLib.path_get_dirname(this._cli.path)), 'share', 'sounds']);
         // The icons beside the system's in the top bar, shown while it matters.
         this._panelIcon = panelIcon;
-        this._panelAnim = panelAnim;
         this.connect('clicked', () => this._toggle());
 
         this._state = {
@@ -335,20 +333,10 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
     // -------------------------------------------------------------- menu
 
     _buildMenu() {
-        // Everything goes in one section inside a scroll view: with the radar
-        // open the menu is taller than Quick Settings has room for.
+        // Everything goes in one section. It isn't height-limited: a menu
+        // taller than the screen scrolls with the whole Quick Settings panel.
         const menu = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(menu);
-        this.menu.box.remove_child(menu.actor);
-        this._scroll = new St.ScrollView({
-            style_class: 'puffdrop-scroll',
-            hscrollbar_policy: St.PolicyType.NEVER,
-            vscrollbar_policy: St.PolicyType.AUTOMATIC,
-            overlay_scrollbars: true,
-            x_expand: true,
-        });
-        this._scroll.set_child(menu.actor);
-        this.menu.box.add_child(this._scroll);
 
         // The switch, and the state it controls.
         this._hero = new ActionItem(() => this._toggle(), {style_class: 'puffdrop-hero'});
@@ -361,10 +349,7 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         heroLabels.add_child(this._countdownLabel);
         this._switch = new PopupMenu.Switch(false);
         this._switch.y_align = Clutter.ActorAlign.CENTER;
-        this._heroAnim = new AnimatedIcon(32);
-        this._heroAnim.visible = false;
         this._hero.add_child(this._heroIcon);
-        this._hero.add_child(this._heroAnim);
         this._hero.add_child(heroLabels);
         this._hero.add_child(this._switch);
         menu.addMenuItem(this._hero);
@@ -584,11 +569,8 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         this._heroIcon.gicon = usable ? this._gicon : this._giconCrossed;
         this._heroIcon.opacity = lit ? 255 : 140;
         this._setDrifting(s.busy || this._settling);
-        const on = usable && s.receiving && s.visibility === 1 && !s.busy;
-        this._panelAnim.visible = this._heroAnim.visible = on;
-        this._heroIcon.visible = !on;
         // In the top bar only while on, or on its way: like Caffeine's.
-        this._panelIcon.visible = !on && (s.busy || this._settling);
+        this._panelIcon.visible = usable && (s.receiving || s.busy);
 
         this._stateLabel.text = this._stateText;
         this._countdownLabel.text = this._countdownText;
@@ -1466,8 +1448,6 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
     // menu has only stepped aside for a chooser.
     _openChanged(open) {
         const s = this._state;
-        if (open)
-            this._fitToScreen();
         if (open && !s.busy)
             this._refreshStatus();
         if (!open && !this._sendRunning && !s.pickingDir)
@@ -1491,15 +1471,6 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
             return Clutter.EVENT_STOP;
         }
         return Clutter.EVENT_PROPAGATE;
-    }
-
-    // Leave room for the Quick Settings grid above the menu: the rest of the
-    // screen height, in logical pixels, is what the scroll view may use.
-    _fitToScreen() {
-        const area = Main.layoutManager.getWorkAreaForMonitor(Main.layoutManager.primaryIndex);
-        const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
-        const max = Math.max(240, Math.round(area.height * 0.55 / scale));
-        this._scroll.style = `max-height: ${max}px;`;
     }
 
     // The menu lives inside Quick Settings: stepping aside for a chooser
@@ -1530,12 +1501,7 @@ class PuffdropIndicator extends QuickSettings.SystemIndicator {
         const icon = this._addIndicator();
         icon.set_pivot_point(0.5, 0.5);
         icon.visible = false;
-        // While on, the animated mark stands in for the still one.
-        const anim = new AnimatedIcon(16, 'puffdrop-panel-anim');
-        anim.visible = false;
-        anim.connect('notify::visible', () => this._syncIndicatorsVisible());
-        this.add_child(anim);
-        this.quickSettingsItems.push(new Toggle(extension, icon, anim));
+        this.quickSettingsItems.push(new Toggle(extension, icon));
     }
 
     destroy() {

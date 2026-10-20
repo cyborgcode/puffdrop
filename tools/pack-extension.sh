@@ -7,6 +7,6 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${1:-$ROOT/dist}
 mkdir -p "$OUT"
 gnome-extensions pack --force --out-dir="$OUT" \
-  --extra-source=cli.js --extra-source=radar.js --extra-source=icon.js --extra-source=icons \
+  --extra-source=cli.js --extra-source=radar.js --extra-source=icons \
   "$ROOT/extension"
 ls "$OUT"/*.shell-extension.zip
