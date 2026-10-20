@@ -110,6 +110,17 @@ class PuffdropActionItem extends PopupMenu.PopupBaseMenuItem {
     }
 });
 
+// The window slider, minus the mouse wheel: in a scrolling menu the wheel
+// belongs to the menu, and a slider that took it changed the window (and
+// reset a running one) whenever the pointer passed over it. Dragging and the
+// arrow keys still move it.
+const WindowSlider = GObject.registerClass(
+class PuffdropWindowSlider extends Slider {
+    vfunc_scroll_event() {
+        return Clutter.EVENT_PROPAGATE;
+    }
+});
+
 // A row that only holds things: not a target of its own. Reactive, so the
 // theme does not draw it insensitive (greyed), but never activated, focused
 // or highlighted itself; what it holds still takes clicks and focus.
@@ -403,7 +414,7 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         this._usableItems.push(windowHead);
 
         const windowRow = new PopupMenu.PopupBaseMenuItem({activate: false, style_class: 'puffdrop-slider-row'});
-        this._slider = new Slider(this._state.windowIndex / (WINDOW_STOPS.length - 1));
+        this._slider = new WindowSlider(this._state.windowIndex / (WINDOW_STOPS.length - 1));
         this._slider.x_expand = true;
         this._slider.accessible_name = 'Stay visible for';
         this._slider.connect('notify::value', () => this._sliderMoved());
