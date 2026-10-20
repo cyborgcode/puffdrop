@@ -18,7 +18,7 @@ export default class extends Extension { enable() { global.context.unsafe_mode =
 J
 chmod +x "$HERE"/fake/* "$HERE"/shim/*
 export HOME=$W/home XDG_CONFIG_HOME=$W/config XDG_DATA_HOME=$W/data XDG_CACHE_HOME=$W/home/.cache XDG_RUNTIME_DIR=$W/run
-export STATE=$W/state OMDROP_DISCOVERABLE=$HERE/fake/omdrop-discoverable OMDROP_SENDER=$HERE/fake/send-to-peer
+export STATE=$W/state OMDROP_DISCOVERABLE=$HERE/fake/omdrop-discoverable OMDROP_SENDER=$HERE/fake/send-to-peer OMDROP_PICKER=$HERE/fake/picker
 export PATH=$HERE/shim:$ROOT/bin:$PATH DRIVE="python3 -I $HERE/drive.py"
 unset WAYLAND_DISPLAY DISPLAY
 exec dbus-run-session -- bash -c '

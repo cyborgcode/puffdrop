@@ -138,7 +138,7 @@ function holder(styleClass = '') {
 // on or off, and its arrow opens the full menu.
 const Toggle = GObject.registerClass(
 class PuffdropToggle extends QuickSettings.QuickMenuToggle {
-    _init(extension, panelIcon) {
+    _init(extension, panelIcon, panelLabel) {
         const gicon = Gio.icon_new_for_string(`${extension.path}/icons/puffdrop-symbolic.svg`);
         super._init({title: 'Puffdrop', gicon, toggleMode: false});
         this._extension = extension;
@@ -148,6 +148,7 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         this._soundDir = GLib.build_filenamev([GLib.path_get_dirname(GLib.path_get_dirname(this._cli.path)), 'share', 'sounds']);
         // The icons beside the system's in the top bar, shown while it matters.
         this._panelIcon = panelIcon;
+        this._panelLabel = panelLabel;
         this.connect('clicked', () => this._toggle());
 
         this._state = {
@@ -161,6 +162,7 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
             sendingTo: '', sendingName: '', sendStatus: '', sendChosen: false,
             sendFailed: false, sendDone: false, sendCancelled: false, sendingFile: '',
             doctorText: '', driverInstallable: false, wifiConnected: null,
+            incoming: [], sendPercent: -1,
         };
         this._peerNames = new Map();     // mac -> name, everything learnt this session
         this._flashed = new Set();       // rows that have had their arrival flash
@@ -387,6 +389,11 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         this._detailItem.add_child(this._detail);
         menu.addMenuItem(this._detailItem);
 
+        // What is arriving, one row per upload, while it arrives.
+        this._incomingSection = new PopupMenu.PopupMenuSection();
+        menu.addMenuItem(this._incomingSection);
+        this._incomingRows = [];
+
         // The one thing a first run can act on from here. It opens a terminal
         // rather than installing anything quietly: installing a radio backend
         // is the user's decision, taken at their own sudo prompt.
@@ -598,6 +605,10 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         this._setDrifting(s.busy || this._settling);
         // In the top bar only while on, or on its way: like Caffeine's.
         this._panelIcon.visible = usable && (s.receiving || s.busy);
+        const pct = this._transferPercent;
+        this._panelLabel.text = pct >= 0 ? `${pct}%` : '';
+        this._panelLabel.visible = pct >= 0;
+        this._syncIncoming();
 
         this._stateLabel.text = this._stateText;
         this._countdownLabel.text = this._countdownText;
@@ -660,6 +671,65 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
     }
 
     // The chosen tab is lit; the others stay dim until hovered or focused.
+    // The share of an upload that has arrived, 0-99: the bytes are the
+    // compressed ones on the wire against the announced file sizes, so it is
+    // never shown as done until the receiver has stored it.
+    _incomingPercent(t) {
+        if (!(t.total > 0))
+            return 0;
+        return Math.max(0, Math.min(99, Math.floor(t.received * 100 / t.total)));
+    }
+
+    // The percent beside the top-bar icon: the transfer furthest from done,
+    // either way, or nothing when none is moving.
+    get _transferPercent() {
+        const s = this._state;
+        const all = s.incoming.map(t => this._incomingPercent(t));
+        if (this._sendActive && s.sendPercent >= 0)
+            all.push(s.sendPercent);
+        return all.length ? Math.min(...all) : -1;
+    }
+
+    _progressRow() {
+        const item = holder('puffdrop-incoming');
+        const column = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_expand: true});
+        const label = wrappingLabel('puffdrop-incoming-label');
+        const track = new St.Widget({style_class: 'puffdrop-track', x_expand: true, clip_to_allocation: true});
+        const fill = new St.Widget({style_class: 'puffdrop-track-fill'});
+        track.add_child(fill);
+        column.add_child(label);
+        column.add_child(track);
+        item.add_child(column);
+        const row = {item, label, track, fill, fraction: 0};
+        track.connect('notify::width', () => this._sizeFill(row));
+        return row;
+    }
+
+    _sizeFill(row) {
+        row.fill.set_size(Math.round(row.track.width * row.fraction), row.track.height);
+    }
+
+    _syncIncoming() {
+        const list = this._state.incoming;
+        while (this._incomingRows.length < list.length) {
+            const row = this._progressRow();
+            this._incomingRows.push(row);
+            this._incomingSection.addMenuItem(row.item);
+        }
+        while (this._incomingRows.length > list.length)
+            this._incomingRows.pop().item.destroy();
+        list.forEach((t, i) => {
+            const row = this._incomingRows[i];
+            const files = Array.isArray(t.files) ? t.files : [];
+            const what = files.length === 1 ? files[0] : files.length ? `${files.length} files` : 'a file';
+            const pct = this._incomingPercent(t);
+            row.label.text = `Receiving ${what} from ${t.sender || 'a nearby device'} · ${pct}%`;
+            row.fraction = pct / 100;
+            this._sizeFill(row);
+        });
+        this._incomingSection.actor.visible = list.length > 0 && this._usable;
+    }
+
     _setSelected(button, selected) {
         if (selected)
             button.add_style_pseudo_class('checked');
@@ -759,7 +829,8 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
     // the next slow poll; 3 s with the menu open, 10 s otherwise.
     _armResync() {
         const s = this._state;
-        const ms = s.busy || this._settling ? 1000 : this.menu.isOpen ? 3000 : 10000;
+        const ms = s.busy || this._settling || s.incoming.length ? 1000
+            : s.receiving ? 2000 : this.menu.isOpen ? 3000 : 10000;
         if (this._resyncMs === ms && this._timers.has('resync'))
             return;
         this._resyncMs = ms;
@@ -867,6 +938,7 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         s.downloadDir = j.dir || '';
         s.blockedReason = j.reason || '';
         s.wifiConnected = typeof j.wifi_connected === 'boolean' ? j.wifi_connected : null;
+        s.incoming = Array.isArray(j.incoming) ? j.incoming : [];
         if (!s.windowSeeded && !s.windowPicking) {
             s.windowIndex = stopForWindow(j.window);
             s.windowSeeded = true;
@@ -1317,8 +1389,13 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         row.cancel.visible = this._sendActive || (s.sendFailed && !this._sendRunning);
         row.cancel.accessible_name = s.sendFailed ? 'Dismiss' : 'Cancel the send';
         row.track.visible = target && (this._sendActive || s.sendDone);
-        row.fill.visible = s.sendDone;
-        const slide = target && this._sendActive;
+        // A share once the upload reports one; the sliding segment until then,
+        // while the device is asked and accepts.
+        const measured = target && this._sendActive && s.sendPercent >= 0;
+        row.fill.visible = s.sendDone || measured;
+        if (row.fill.visible)
+            row.fill.set_size(Math.round(row.track.width * (s.sendDone ? 1 : s.sendPercent / 100)), row.track.height);
+        const slide = target && this._sendActive && !measured;
         row.segment.visible = slide;
         if (slide && !row.sliding) {
             row.sliding = true;
@@ -1349,7 +1426,7 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
             return;
         const named = s.peers.find(p => p.mac === mac);
         Object.assign(s, {
-            sendingTo: mac, sendingName: named ? named.name : '', sendStatus: 'Choose files…',
+            sendingTo: mac, sendingName: named ? named.name : '', sendStatus: 'Choose files…', sendPercent: -1,
             sendChosen: false, sendFailed: false, sendDone: false, sendCancelled: false, sendingFile: '',
         });
         this._stopTimer('sendClose');
@@ -1368,6 +1445,11 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
                 const chosen = /^Preparing (.*)\.\.\.$/.exec(line);
                 if (chosen)
                     s.sendingFile = chosen[1];
+                const uploading = /^Uploading (\d+)%$/.exec(line);
+                if (uploading) {
+                    s.sendPercent = Number(uploading[1]);
+                    line = `Sending ${s.sendingFile || 'the file'} to ${peerLabel()}... ${s.sendPercent}%`;
+                }
                 s.sendStatus = line;
                 this._render();
             },
@@ -1535,7 +1617,11 @@ class PuffdropIndicator extends QuickSettings.SystemIndicator {
         const icon = this._addIndicator();
         icon.set_pivot_point(0.5, 0.5);
         icon.visible = false;
-        this.quickSettingsItems.push(new Toggle(extension, icon));
+        // How far a transfer has got, beside the icon, while one is moving.
+        const label = new St.Label({style_class: 'puffdrop-panel-percent', y_align: Clutter.ActorAlign.CENTER, visible: false});
+        label.connect('notify::visible', () => this._syncIndicatorsVisible());
+        this.add_child(label);
+        this.quickSettingsItems.push(new Toggle(extension, icon, label));
     }
 
     destroy() {

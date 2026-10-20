@@ -176,3 +176,12 @@
   padding-top: 4px;
   padding-bottom: 4px;
 }
+
+.puffdrop-panel-percent {
+  font-feature-settings: "tnum";
+  padding-left: 2px;
+}
+
+.puffdrop-incoming-label {
+  font-size: 0.9em;
+}

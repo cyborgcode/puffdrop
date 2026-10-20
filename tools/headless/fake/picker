@@ -1,0 +1,4 @@
+#!/bin/bash
+# Answers the file chooser at once with a small file.
+f=$STATE/photo.png; [ -e "$f" ] || head -c 2000 /dev/urandom > "$f"
+printf '%s\0' "$f"

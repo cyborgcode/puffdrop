@@ -18,7 +18,7 @@ bin/puffdrop setup            # the puffdrop command, the receiver service and t
 puffdrop install-driver       # the radio backend and receiver packages, with apt (asks for your password)
 ```
 
-`install-driver` builds omdrop-owl from a pinned commit into a `.deb`, installs it with apt, installs `python3-libarchive-c` and `keyutils`, and, when UFW is active, adds one firewall rule: TCP 8771 on `awdl0`, from IPv6 link-local addresses only.
+`install-driver` builds omdrop-owl from a pinned commit into a `.deb`, installs it with apt, installs `python3-libarchive-c` and `keyutils`, and, when UFW is active, adds one firewall rule: TCP 8770 and 8771 on `awdl0`, from IPv6 link-local addresses only.
 
 Log out and back in once: GNOME Shell on Wayland loads a new extension only at login. Then switch Puffdrop on in the Extensions app if it is not on already. Its icon, the AirDrop mark, appears in the top bar.
 
@@ -54,9 +54,15 @@ Click the icon to open the panel:
 
 Received files are saved, copied to the clipboard, and announced in a notification; clicking the notification opens the file. A shared link arrives as a `.url` or `.webloc` file and opens in your browser; only `http` and `https` links open.
 
+While a file arrives, the menu shows "Receiving IMG_2041.HEIC from Rayen's iPhone · 45%" with a bar, and the percent appears beside the Puffdrop icon in the top bar.
+
 ## Send files
 
-Expand **Send to peers**, or press `n` in the panel. If Puffdrop is off, this turns it on. A radar shows each nearby device as a dot, brighter and nearer the centre for a stronger signal; devices that answer with a name are listed above it. Click one, choose files, and the row shows progress, with an **×** to cancel.
+Expand **Send to peers**, or press `n` in the panel. If Puffdrop is off, this turns it on. A radar shows each nearby device as a dot, brighter and nearer the centre for a stronger signal; devices that answer with a name are listed above it. Click one, choose files, and the row shows the upload's percent and a bar, with an **×** to cancel; the percent also appears beside the top-bar icon. Opening Send to peers does not turn Puffdrop on: turn it on first.
+
+### Between two Puffdrop computers
+
+Two computers running Puffdrop send to each other the same way: turn Puffdrop on on both, and each appears in the other's Send to peers. The receiver answers on 8771, the port its announcements name for Apple devices, and on 8770, the port the sender dials directly. After upgrading, run `puffdrop firewall install` once on each computer so the firewall lets 8770 through as well. On Intel cards both computers are off Wi-Fi while visible.
 
 ## Command line
 

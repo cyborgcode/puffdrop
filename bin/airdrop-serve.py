@@ -137,6 +137,11 @@ ap = argparse.ArgumentParser(
                 '(name, model, download_dir, max_receive_percent); flags override.')
 ap.add_argument('--iface', default='awdl0')
 ap.add_argument('--port', type=int, default=8771)
+# Apple devices find the receiver through the port its announcements name
+# (--port); another Puffdrop's sender dials AirDrop's own port, 8770, straight
+# at a peer's link-local address. Listening on both lets either reach it.
+ap.add_argument('--also-port', type=int, action='append', default=[],
+                help='another port to serve the same endpoints on')
 ap.add_argument('--name', default=None,
                 help='ReceiverComputerName: the label under the tile in the Mac sheet (config: name)')
 ap.add_argument('--model', default=None,
@@ -305,6 +310,59 @@ class ReadDeadline:
         of = f' of {expected}' if expected is not None else ''
         return (f'request body read timed out, {why}: {self.transferred}{of} '
                 f'bytes in {time.monotonic() - self.started:.1f} s')
+
+
+# What is arriving right now, for the panel: one small JSON file per upload in
+# $XDG_RUNTIME_DIR/omdrop/receiving, rewritten at most twice a second and
+# removed when the upload ends however it ends. `puffdrop status` reads them.
+PROGRESS_DIR = os.path.join(os.environ.get('XDG_RUNTIME_DIR') or f'/run/user/{os.getuid()}',
+                            'omdrop', 'receiving')
+PROGRESS_INTERVAL = 0.5
+
+
+class UploadProgress:
+    """A writer that passes everything to `target` and reports how much has
+    arrived. The bytes counted are the compressed ones on the wire; the total
+    is the sum of the file sizes the sender announced, which for photos and
+    video (already compressed) is about the same, so the share is capped below
+    100 until the upload is stored."""
+
+    def __init__(self, target, tid, sender, files, total):
+        self._target = target
+        self._path = os.path.join(PROGRESS_DIR, f'{tid}.json')
+        self._info = {'sender': sender, 'files': files, 'total': total, 'received': 0,
+                      'started': time.time()}
+        self._written_at = 0.0
+        self._report(force=True)
+
+    def __getattr__(self, name):
+        return getattr(self._target, name)
+
+    def write(self, data):
+        written = self._target.write(data)
+        self._info['received'] += written or 0
+        self._report()
+        return written
+
+    def _report(self, force=False):
+        now = time.monotonic()
+        if not force and now - self._written_at < PROGRESS_INTERVAL:
+            return
+        self._written_at = now
+        try:
+            os.makedirs(PROGRESS_DIR, mode=0o700, exist_ok=True)
+            tmp = f'{self._path}.tmp'
+            with open(tmp, 'w') as f:
+                json.dump(self._info, f)
+            os.replace(tmp, self._path)
+        except OSError:
+            pass                        # progress is a courtesy, never a failure
+
+    def close(self):
+        try:
+            os.unlink(self._path)
+        except OSError:
+            pass
 
 
 class LimitedWriter:
@@ -945,6 +1003,9 @@ class Handler(BaseHTTPRequestHandler):
                      ','.join(ask.get('TransferType') or {}) or '?', len(files),
                      '; '.join(f"{f.get('FileName')} {f.get('FileType')} {f.get('FileSize')}B"
                                for f in files) or (ask.get('Items') or '-'))
+        # For the Upload that follows on this connection: who, and what.
+        self._ask_sender = str(ask.get('SenderComputerName') or 'A nearby device')
+        self._ask_files = [str(f.get('FileName')) for f in files if isinstance(f, dict) and f.get('FileName')]
         items = ask.get('Items') or []
         if len(items) > MAX_ARCHIVE_MEMBERS:
             self.reject(413, f'Ask exceeds {MAX_ARCHIVE_MEMBERS}-item limit')
@@ -1021,6 +1082,7 @@ class Handler(BaseHTTPRequestHandler):
         deadline = ReadDeadline()
         plan = None
         ended_early = False
+        progress = None
         try:
             receive_budget = ReceiveBudget(DEST, MAX_RECEIVE_PERCENT)
             plan = body_plan(self.headers, receive_budget.byte_limit)
@@ -1036,8 +1098,14 @@ class Handler(BaseHTTPRequestHandler):
                     self.rfile, self.request,
                     lambda: archive_is_complete(raw, receive_budget.byte_limit))
                 try:
+                    total = int(self.headers.get('TotalBytes', '0'))
+                except ValueError:
+                    total = 0
+                progress = UploadProgress(raw, tid, getattr(self, '_ask_sender', 'A nearby device'),
+                                          getattr(self, '_ask_files', []), total)
+                try:
                     wire_bytes = read_request_body(
-                        patient, self.headers, raw, receive_budget.byte_limit,
+                        patient, self.headers, progress, receive_budget.byte_limit,
                         check_disk=True, plan=plan, deadline=deadline)
                 except BodyComplete:
                     raw.flush()
@@ -1071,6 +1139,8 @@ class Handler(BaseHTTPRequestHandler):
             self.reject(422, f'upload is not a valid bounded DVZip archive: {e}')
             return
         finally:
+            if progress is not None:
+                progress.close()
             UPLOAD_SLOTS.release()
         self.send_response(200)
         self.send_header('Content-Length', '0')
@@ -1262,26 +1332,41 @@ if IFACE_ADDR is None:
 # what the user wants instead: the usual reason is the previous run's socket
 # still unwinding, which clears in seconds now that stopping resets its
 # sessions.
-def bind_server(attempts=5, pause=2):
+def bind_server(port, attempts=5, pause=2):
     for attempt in range(1, attempts + 1):
         try:
-            return ThreadingHTTPServerV6(('::', args.port), Handler)
+            return ThreadingHTTPServerV6(('::', port), Handler)
         except OSError as e:
             if e.errno != errno.EADDRINUSE:
                 raise
-        logging.warning('port %d still held; retry %d of %d', args.port,
+        logging.warning('port %d still held; retry %d of %d', port,
                         attempt, attempts)
         time.sleep(pause)
     return None
 
 
-server = bind_server()
+server = bind_server(args.port)
 if server is None:
     logging.error('port %d is still held by something else after waiting; '
                   'the announcer only ever names %d', args.port, args.port)
     sys.exit(1)
-server.socket = tls_context().wrap_socket(server.socket, server_side=True,
-                                          do_handshake_on_connect=False)
+TLS = tls_context()
+server.socket = TLS.wrap_socket(server.socket, server_side=True,
+                                do_handshake_on_connect=False)
+# The extra ports serve the same handler from threads of their own. One that
+# cannot be bound is logged and skipped: Apple devices only need --port.
+extra_servers = []
+for port in args.also_port:
+    if port == args.port:
+        continue
+    extra = bind_server(port, attempts=2)
+    if extra is None:
+        logging.error('port %d is held by something else; serving without it', port)
+        continue
+    extra.socket = TLS.wrap_socket(extra.socket, server_side=True, do_handshake_on_connect=False)
+    threading.Thread(target=extra.serve_forever, name=f'port-{port}', daemon=True).start()
+    extra_servers.append(extra)
+    logging.info('also serving on port %d', port)
 logging.info('config %s: %s', args.config, ', '.join(f'{k}={v!r}' for k, v in sorted(_cfg.items())) or 'absent (defaults)')
 logging.info('serving %s._airdrop._tcp.local as %s (%s) on [%s]:%d, receiving into %s',
              sid, NAME, MODEL, IFACE_ADDR, args.port, DEST)
@@ -1298,5 +1383,6 @@ try:
 except KeyboardInterrupt:
     pass
 finally:
-    server.reset_sessions()
-    server.server_close()
+    for srv in [server, *extra_servers]:
+        srv.reset_sessions()
+        srv.server_close()

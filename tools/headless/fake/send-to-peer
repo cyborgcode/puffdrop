@@ -1,7 +1,17 @@
 #!/bin/bash
+here=$(dirname "$0")
 if [[ " $* " == *" --help "* ]]; then echo "usage: send-to-peer [--list] [--names] [--stream] [--url URL] [--mac MAC] [file ...]"; exit 0; fi
 rows=("3a:1f:9c:22:01:7e -48 dBm [fe80::1]:8770|Rayen's iPhone" "be:42:07:aa:19:c3 -63 dBm [fe80::2]:8770|Studio Mac")
-named=0; [[ " $* " == *" --names "* ]] && named=1
-for r in "${rows[@]}"; do line=${r%%|*}; name=${r#*|}; if (( named )); then printf '%s  %s\n' "$line" "$name"; else printf '%s\n' "$line"; fi; done
-(( named )) && sleep 20
-exit 0
+if [[ " $* " == *" --list "* ]]; then
+  named=0; [[ " $* " == *" --names "* ]] && named=1
+  for r in "${rows[@]}"; do line=${r%%|*}; name=${r#*|}; if (( named )); then printf '%s  %s\n' "$line" "$name"; else printf '%s\n' "$line"; fi; done
+  (( named )) && sleep 20
+  exit 0
+fi
+echo "12:00:00Z discover ok; asking"; sleep 1
+echo "12:00:01Z ASK -> accepted"
+python3 "$here/airdrop-send.py" & child=$!
+sleep 0.2
+echo "12:00:01Z UPLOAD 2000000 B dvzip (2000000 B cpio) TransferID TEST"
+wait $child
+echo "12:00:05Z UPLOAD photo.png -> ok (2000000 B, 4.0s)"

@@ -357,6 +357,26 @@ setting_set() {
 }
 
 
+# What is arriving right now, as a JSON array: the receiver keeps one file per
+# upload in $RECEIVING_DIR while it lasts (bin/airdrop-serve.py). Only while
+# receiving, so a file a killed receiver left behind is not shown as progress.
+RECEIVING_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omdrop/receiving"
+incoming_json() {
+  receiving || { printf '[]'; return; }
+  python3 -c '
+import glob, json, os, sys
+out = []
+for path in sorted(glob.glob(os.path.join(sys.argv[1], "*.json"))):
+    try:
+        with open(path) as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        continue
+    if isinstance(d, dict):
+        out.append({k: d.get(k) for k in ("sender", "files", "received", "total")})
+print(json.dumps(out), end="")' "$RECEIVING_DIR"
+}
+
 # "yes" when a Wi-Fi device is connected, "no" when there are Wi-Fi devices
 # and none is, nothing when NetworkManager knows of no Wi-Fi device at all.
 wifi_state() {
@@ -989,7 +1009,7 @@ print(json.dumps({"ready": not rows,
 # the application. `install-driver` calls this command in the same visible
 # terminal after its package work, which normally reuses the same sudo
 # authentication without putting Puffdrop policy in the driver package.
-UFW_RULE=(allow in on awdl0 from fe80::/10 to fe80::/10 port 8771 proto tcp
+UFW_RULE=(allow in on awdl0 from fe80::/10 to fe80::/10 port 8770,8771 proto tcp
           comment "Puffdrop AirDrop receiver")
 
 ufw_active() {
@@ -1307,7 +1327,8 @@ cmd_on() {
     ensure_tls; (( $? == 2 )) && return 1
     # The unit may write opt-in protocol dumps only here (ReadWritePaths= with
     # `-`, ignored when absent), and its sandbox cannot create the directory.
-    (umask 077 && mkdir -p -- "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omdrop/debug") || true
+    (umask 077 && mkdir -p -- "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omdrop/debug" \
+                              "$RECEIVING_DIR") || true
     systemctl --user reset-failed "$UNIT" >/dev/null 2>&1 || true
     systemctl --user start "$UNIT"
   }
@@ -1445,7 +1466,7 @@ cmd_status() {
     ON="$on" LEFT="$left" VIS="$vis" MODE="$mode" DIR="$(effective_dir)" \
     REASON="$reason" RXPROVEN="$rxproven" NAME="$(effective_name)" \
     AUDIENCE="$(cmd_visibility)" SENDERS="$(sender_count)" \
-    SOUND="$(sound_on && echo 1)" WINDOW_DEFAULT="$(default_window)" WIFI="$(wifi_state)" python3 -c '
+    SOUND="$(sound_on && echo 1)" WINDOW_DEFAULT="$(default_window)" WIFI="$(wifi_state)" INCOMING="$(incoming_json)" python3 -c '
 import json, os
 left, vis = os.environ["LEFT"], os.environ["VIS"]
 print(json.dumps({
@@ -1466,6 +1487,8 @@ print(json.dumps({
     # NetworkManager knows. Cards the backend runs in exclusive mode leave
     # Wi-Fi off while visible, and the panel says so.
     "wifi_connected": {"yes": True, "no": False}.get(os.environ["WIFI"]),
+    # Uploads arriving now: sender, files, bytes received and announced.
+    "incoming": json.loads(os.environ["INCOMING"] or "[]"),
     # Who may send: "everyone" or "contacts", with the allow-list size so the
     # panel can warn that an empty list refuses everybody.
     "visibility": os.environ["AUDIENCE"],
@@ -1568,10 +1591,41 @@ describe_files() {
 # sending a photo needs four sentences out of it, so this turns the lines that
 # carry one into a sentence and drops the rest. `--verbose` prints the log
 # untouched, which is what a bug report wants.
+# How far an upload has got, as "Uploading N%" lines. The sender builds the
+# archive in memory and then writes it to the connection, so the bytes its
+# process has written since the upload began (wchar in /proc/PID/io, which
+# counts socket writes) measure the upload; TLS framing makes that a little
+# more than the body, so it holds at 99 until the sender reports the result.
+# Every 1% for the panel; every 10% in a terminal, where each is a line.
+upload_progress() {
+  local total=$1 pid base now pct last=-1 step=1
+  [[ -t 1 ]] && step=10
+  (( total > 0 )) || return 0
+  pid=$(pgrep -g 0 -n -f 'airdrop-send\.py') || return 0
+  base=$(awk '/^wchar:/ { print $2 }' "/proc/$pid/io" 2>/dev/null)
+  [[ "$base" =~ ^[0-9]+$ ]] || return 0
+  while kill -0 "$pid" 2>/dev/null; do
+    now=$(awk '/^wchar:/ { print $2 }' "/proc/$pid/io" 2>/dev/null)
+    [[ "$now" =~ ^[0-9]+$ ]] || break
+    pct=$(( (now - base) * 100 / total ))
+    (( pct > 99 )) && pct=99
+    if (( last < 0 || pct >= last + step )); then
+      printf 'Uploading %d%%\n' "$pct"
+      last=$pct
+    fi
+    sleep 0.5
+  done
+}
+
 narrate_send() {
-  local line rest name stat
+  local line rest name stat watcher=
+  # Whatever ends the narration ends the progress watcher with it.
+  trap '[[ -z "$watcher" ]] || kill "$watcher" 2>/dev/null' EXIT
   while IFS= read -r line; do
     case "$line" in
+      *"UPLOAD "*" B dvzip "*)
+        rest=${line#*UPLOAD }
+        upload_progress "${rest%% B dvzip*}" & watcher=$! ;;
       *"; asking"*)             printf 'Asking them to accept it...\n' ;;
       *"ASK -> accepted"*)      printf 'They accepted. Sending...\n' ;;
       *"ASK -> declined"*)      printf 'They declined it.\n' >&2 ;;
@@ -1579,6 +1633,7 @@ narrate_send() {
       *"UPLOAD failed: "*)      printf 'The transfer failed: %s\n' "${line#*UPLOAD failed: }" >&2 ;;
       *"UPLOAD "*" -> FAILED"*) printf 'The transfer failed.\n' >&2 ;;
       *"UPLOAD "*" -> ok ("*)
+        [[ -z "$watcher" ]] || { kill "$watcher" 2>/dev/null; watcher=; }
         rest=${line#*UPLOAD }; name=${rest%% -> ok *}; stat=${line##*-> ok (}
         printf 'Sent %s (%s)\n' "$name" "${stat%)}" ;;
       # A link is delivered by the accepted Ask: there is no upload.
@@ -2700,6 +2755,7 @@ cmd_dir() {
     echo "ReadWritePaths=$new"
     echo "ReadWritePaths=%h/.omdrop"
     echo "ReadWritePaths=-%t/omdrop/debug"
+    echo "ReadWritePaths=-%t/omdrop/receiving"
   } > "$dropin/10-download-dir.conf"
   systemctl --user daemon-reload
 

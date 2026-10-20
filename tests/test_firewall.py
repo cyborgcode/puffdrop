@@ -79,7 +79,7 @@ for arg do printf '<%s>\\n' "$arg" >> "$CAPTURE"; done
                 "<to>",
                 "<fe80::/10>",
                 "<port>",
-                "<8771>",
+                "<8770,8771>",
                 "<proto>",
                 "<tcp>",
                 "<comment>",
@@ -103,7 +103,7 @@ for arg do printf '<%s>\\n' "$arg" >> "$CAPTURE"; done
         self.assertEqual(self.captured_args()[:4], ["<ufw>", "<--force>", "<delete>", "<allow>"])
         self.assertEqual(self.captured_args()[4:], [
             "<in>", "<on>", "<awdl0>", "<from>", "<fe80::/10>",
-            "<to>", "<fe80::/10>", "<port>", "<8771>", "<proto>", "<tcp>",
+            "<to>", "<fe80::/10>", "<port>", "<8770,8771>", "<proto>", "<tcp>",
             "<comment>", "<Puffdrop AirDrop receiver>",
         ])
 
