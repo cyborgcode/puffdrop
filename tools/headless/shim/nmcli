@@ -1,0 +1,3 @@
+#!/bin/bash
+# Wi-Fi is connected unless $STATE/wifi-off exists, as in an exclusive window.
+[[ -e $STATE/wifi-off ]] && echo "wifi:unmanaged" || echo "wifi:connected"

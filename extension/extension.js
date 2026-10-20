@@ -149,7 +149,7 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
             sendersOpen: false, senderList: [], senderError: '',
             sendingTo: '', sendingName: '', sendStatus: '', sendChosen: false,
             sendFailed: false, sendDone: false, sendCancelled: false, sendingFile: '',
-            doctorText: '', driverInstallable: false,
+            doctorText: '', driverInstallable: false, wifiConnected: null,
         };
         this._peerNames = new Map();     // mac -> name, everything learnt this session
         this._flashed = new Set();       // rows that have had their arrival flash
@@ -253,7 +253,8 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
                 return 'Your known-senders list is empty, so everyone is refused. Add people with the button on the right.';
             return `Only your ${s.senders} known sender${s.senders === 1 ? '' : 's'} should see ${who} in AirDrop, after 10 seconds.`;
         }
-        return `Nearby Apple devices should see ${who} in AirDrop, after 10 seconds.`;
+        const wifi = this._wifiPaused ? ' Wi-Fi is off while you are visible, and comes back when Puffdrop turns off.' : '';
+        return `Nearby Apple devices should see ${who} in AirDrop, after 10 seconds.${wifi}`;
     }
 
     get _detailText() {
@@ -290,12 +291,22 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
     }
 
+    // Cards the backend runs in exclusive mode (every Intel card) leave Wi-Fi
+    // off for the whole window: said plainly, so a dropped connection is not
+    // a surprise.
+    get _wifiPaused() {
+        const s = this._state;
+        return s.receiving && s.wifiConnected === false;
+    }
+
     get _countdownText() {
         const s = this._state;
-        if (!s.busy || s.busyElapsed < 4)
+        if (!s.busy || s.busyElapsed < 1)
             return '';
         const m = Math.floor(s.busyElapsed / 60), sec = s.busyElapsed % 60;
-        return `${s.turningOn ? 'WAKING THE RADIO' : 'STOPPING'} · ${m}:${String(sec).padStart(2, '0')}`;
+        // Turning off waits for NetworkManager to bring Wi-Fi back, which is
+        // most of the wait: name it.
+        return `${s.turningOn ? 'WAKING THE RADIO' : 'RECONNECTING WI-FI'} · ${m}:${String(sec).padStart(2, '0')}`;
     }
 
     get _scanningNow() {
@@ -305,8 +316,10 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
 
     get _radarStatus() {
         const s = this._state;
-        if (!s.receiving)
+        if (s.busy && s.turningOn)
             return 'Turning Puffdrop on';
+        if (!s.receiving)
+            return 'Turn Puffdrop on to find nearby devices';
         if (!this._scanningNow)
             return 'Waiting for the radio';
         if (s.peers.length === 0)
@@ -316,8 +329,11 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         return '';
     }
 
+    // Dots only while something is happening; the line asking for Puffdrop
+    // to be turned on is an instruction, not progress.
     get _radarWorking() {
-        return this._state.radarOpen && this._radarStatus !== '';
+        const s = this._state;
+        return s.radarOpen && this._radarStatus !== '' && (s.receiving || s.busy);
     }
 
     // The device a send is going to stays listed until that send is over,
@@ -561,7 +577,7 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         this._panelIcon.gicon = this._gicon;
         this.gicon = usable ? this._gicon : this._giconCrossed;
         this.checked = s.receiving;
-        this.subtitle = this._stateText;
+        this.subtitle = this._wifiPaused && !s.busy ? 'On · Wi-Fi paused' : this._stateText;
         // The menu's own header names the state; the countdown joins it.
         this.menu.setHeader(this.gicon, 'Puffdrop',
             this._countdownText ? `${this._stateText} · ${this._countdownText}` : this._stateText);
@@ -616,9 +632,9 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         this._peersCount.visible = !s.radarOpen && named.length > 0;
         this._chevron.rotation_angle_z = s.radarOpen ? 180 : 0;
         this._radarSection.actor.visible = usable && s.radarOpen;
-        this._radarStatusItem.visible = this._radarWorking;
+        this._radarStatusItem.visible = s.radarOpen && this._radarStatus !== '';
         this._radarStatusWords.text = this._radarStatus;
-        this._radarStatusDots.text = this._radarDots;
+        this._radarStatusDots.text = this._radarWorking ? this._radarDots : '';
         this._peerSeparator.visible = named.length > 0;
         this._radar.setMuted(!s.soundOn);
         this._syncPeerRows(named);
@@ -629,6 +645,7 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
 
         this._updateScanning();
         this._updateTimers();
+        this._armResync();
     }
 
     // The chosen tab is lit; the others stay dim until hovered or focused.
@@ -726,9 +743,17 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
 
     // The resync notices a window that ended somewhere else: an expiry, or
     // someone running `puffdrop off` in a terminal.
+    // Every second while a change is under way (the radio coming up, a toggle
+    // just answered), so the state shows as soon as it is true rather than at
+    // the next slow poll; 3 s with the menu open, 10 s otherwise.
     _armResync() {
+        const s = this._state;
+        const ms = s.busy || this._settling ? 1000 : this.menu.isOpen ? 3000 : 10000;
+        if (this._resyncMs === ms && this._timers.has('resync'))
+            return;
+        this._resyncMs = ms;
         this._stopTimer('resync');
-        this._timer('resync', this.menu.isOpen ? 3000 : 10000, () => {
+        this._timer('resync', ms, () => {
             if (!this._statusRunning)
                 this._refreshStatus();
         });
@@ -830,6 +855,7 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
         s.deviceName = j.name || '';
         s.downloadDir = j.dir || '';
         s.blockedReason = j.reason || '';
+        s.wifiConnected = typeof j.wifi_connected === 'boolean' ? j.wifi_connected : null;
         if (!s.windowSeeded && !s.windowPicking) {
             s.windowIndex = stopForWindow(j.window);
             s.windowSeeded = true;
@@ -1099,13 +1125,10 @@ class PuffdropToggle extends QuickSettings.QuickMenuToggle {
 
     // ------------------------------------------------------------- radar
 
-    // Scanning is what a window does, so opening the radar on a machine that
-    // is off opens one, for as long as the slider says.
+    // Opening the radar never turns Puffdrop on by itself: on many cards that
+    // takes Wi-Fi away, which is the user's call. It says what is needed.
     _openRadar() {
-        const s = this._state;
-        s.radarOpen = !s.radarOpen;
-        if (s.radarOpen && this._usable && !s.receiving && !s.busy)
-            this._toggle();
+        this._state.radarOpen = !this._state.radarOpen;
         this._render();
     }
 

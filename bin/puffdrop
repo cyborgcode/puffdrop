@@ -357,6 +357,15 @@ setting_set() {
 }
 
 
+# "yes" when a Wi-Fi device is connected, "no" when there are Wi-Fi devices
+# and none is, nothing when NetworkManager knows of no Wi-Fi device at all.
+wifi_state() {
+  command -v nmcli >/dev/null 2>&1 || return 0
+  nmcli -t -f TYPE,STATE device 2>/dev/null | awk -F: '
+    $1 == "wifi" { seen = 1; if ($2 == "connected") on = 1 }
+    END { if (seen) print (on ? "yes" : "no") }'
+}
+
 # ~/Downloads reads better than /home/someone/Downloads everywhere a person
 # sees it.
 tildify() { local p=$1; printf '%s\n' "${p/#$HOME/\~}"; }
@@ -1436,7 +1445,7 @@ cmd_status() {
     ON="$on" LEFT="$left" VIS="$vis" MODE="$mode" DIR="$(effective_dir)" \
     REASON="$reason" RXPROVEN="$rxproven" NAME="$(effective_name)" \
     AUDIENCE="$(cmd_visibility)" SENDERS="$(sender_count)" \
-    SOUND="$(sound_on && echo 1)" WINDOW_DEFAULT="$(default_window)" python3 -c '
+    SOUND="$(sound_on && echo 1)" WINDOW_DEFAULT="$(default_window)" WIFI="$(wifi_state)" python3 -c '
 import json, os
 left, vis = os.environ["LEFT"], os.environ["VIS"]
 print(json.dumps({
@@ -1453,6 +1462,10 @@ print(json.dumps({
     "sound": os.environ["SOUND"] == "1",
     # What `on` opens with no duration, where the panel slider rests.
     "window": os.environ["WINDOW_DEFAULT"],
+    # Whether this computer is on Wi-Fi: null when it has no Wi-Fi device
+    # NetworkManager knows. Cards the backend runs in exclusive mode leave
+    # Wi-Fi off while visible, and the panel says so.
+    "wifi_connected": {"yes": True, "no": False}.get(os.environ["WIFI"]),
     # Who may send: "everyone" or "contacts", with the allow-list size so the
     # panel can warn that an empty list refuses everybody.
     "visibility": os.environ["AUDIENCE"],
@@ -1493,6 +1506,7 @@ print(json.dumps({
   fi
   case "$vis" in
     true)
+      [[ "$(wifi_state)" == no ]] && window="$window (Wi-Fi is off while visible)"
       if (( empty )); then
         printf 'Visible as "%s" %s, but nobody can send: contacts only, and the known-senders list is empty\n' \
           "$(effective_name)" "$window"
